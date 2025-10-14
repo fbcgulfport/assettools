@@ -1,73 +1,76 @@
-import { db, emailHistory } from '../db';
-import { desc } from 'drizzle-orm';
-import { EmailService } from '../services/email';
+import { desc } from "drizzle-orm"
+import { db, emailHistory } from "../db"
+import type { EmailService } from "../services/email"
 
 export interface WebServerConfig {
-  port: number;
-  emailService: EmailService;
+	port: number
+	emailService: EmailService
 }
 
 export function createWebServer(config: WebServerConfig) {
-  return Bun.serve({
-    port: config.port,
-    async fetch(req) {
-      const url = new URL(req.url);
+	return Bun.serve({
+		port: config.port,
+		async fetch(req) {
+			const url = new URL(req.url)
 
-      // Serve the main page
-      if (url.pathname === '/' || url.pathname === '/index.html') {
-        return new Response(renderHomePage(), {
-          headers: { 'Content-Type': 'text/html' },
-        });
-      }
+			// Serve the main page
+			if (url.pathname === "/" || url.pathname === "/index.html") {
+				return new Response(renderHomePage(), {
+					headers: { "Content-Type": "text/html" }
+				})
+			}
 
-      // API: Get email history
-      if (url.pathname === '/api/emails') {
-        const limit = parseInt(url.searchParams.get('limit') || '100');
-        const emails = await db
-          .select()
-          .from(emailHistory)
-          .orderBy(desc(emailHistory.sentAt))
-          .limit(limit);
+			// API: Get email history
+			if (url.pathname === "/api/emails") {
+				const limit = Number.parseInt(url.searchParams.get("limit") || "100")
+				const emails = await db
+					.select()
+					.from(emailHistory)
+					.orderBy(desc(emailHistory.sentAt))
+					.limit(limit)
 
-        return new Response(JSON.stringify(emails), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
+				return new Response(JSON.stringify(emails), {
+					headers: { "Content-Type": "application/json" }
+				})
+			}
 
-      // API: Resend email
-      if (url.pathname === '/api/resend' && req.method === 'POST') {
-        try {
-          const body = await req.json();
-          const { id } = body;
+			// API: Resend email
+			if (url.pathname === "/api/resend" && req.method === "POST") {
+				try {
+					const body = await req.json()
+					const { id } = body
 
-          if (!id) {
-            return new Response(JSON.stringify({ error: 'Email ID required' }), {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
+					if (!id) {
+						return new Response(
+							JSON.stringify({ error: "Email ID required" }),
+							{
+								status: 400,
+								headers: { "Content-Type": "application/json" }
+							}
+						)
+					}
 
-          await config.emailService.resendEmail(id);
+					await config.emailService.resendEmail(id)
 
-          return new Response(JSON.stringify({ success: true }), {
-            headers: { 'Content-Type': 'application/json' },
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return new Response(JSON.stringify({ error: message }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-          });
-        }
-      }
+					return new Response(JSON.stringify({ success: true }), {
+						headers: { "Content-Type": "application/json" }
+					})
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error)
+					return new Response(JSON.stringify({ error: message }), {
+						status: 500,
+						headers: { "Content-Type": "application/json" }
+					})
+				}
+			}
 
-      return new Response('Not Found', { status: 404 });
-    },
-  });
+			return new Response("Not Found", { status: 404 })
+		}
+	})
 }
 
 function renderHomePage(): string {
-  return `
+	return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -397,5 +400,5 @@ function renderHomePage(): string {
     </script>
 </body>
 </html>
-  `.trim();
+  `.trim()
 }
