@@ -1,16 +1,51 @@
 import { render } from "@react-email/render"
 import nodemailer from "nodemailer"
+import { createElement as h } from "react"
 import { db, emailHistory, type NewEmailHistory } from "../db"
-import {
-	CheckoutConfirmationEmail,
-	type CheckoutEmailProps,
-	LateNotificationEmail,
-	type LateNotificationEmailProps,
-	type RepairEmailProps,
-	RepairNotificationEmail,
-	ReservationConfirmationEmail,
-	type ReservationEmailProps
-} from "../emails/templates"
+import CheckoutConfirmation, {
+	type CheckoutConfirmationProps
+} from "../emails/CheckoutConfirmation"
+import LateNotification, {
+	type LateNotificationProps
+} from "../emails/LateNotification"
+import RepairNotification, {
+	type RepairNotificationProps
+} from "../emails/RepairNotification"
+import ReservationConfirmation, {
+	type ReservationConfirmationProps
+} from "../emails/ReservationConfirmation"
+
+// Stored email data types
+export interface CheckoutEmailData {
+	assetName: string
+	personName: string
+	personEmail?: string
+	checkoutDate: string
+	dueDate?: string
+	notes?: string
+}
+
+export interface ReservationEmailData {
+	assetName: string
+	personName: string
+	personEmail?: string
+	startDate: string
+	endDate: string
+	notes?: string
+}
+
+export interface RepairEmailData {
+	assetName: string
+	status?: string
+	description?: string
+	dueDate?: string
+	repairDate?: string
+}
+
+export type EmailData =
+	| CheckoutEmailData
+	| ReservationEmailData
+	| RepairEmailData
 
 export interface EmailConfig {
 	host: string
@@ -45,111 +80,152 @@ export class EmailService {
 		to: string,
 		subject: string,
 		html: string,
-		metadata: Omit<NewEmailHistory, "sentAt" | "status" | "errorMessage">
-	): Promise<void> {
+		metadata: Omit<
+			NewEmailHistory,
+			"sentAt" | "status" | "errorMessage" | "recipient" | "subject"
+		>,
+		cc?: string[]
+	): Promise<number> {
 		try {
 			await this.transporter.sendMail({
 				from: `${this.config.from.name} <${this.config.from.email}>`,
 				to,
+				cc,
+				replyTo: this.config.adminEmails[0], // Reply to first admin email
 				subject,
 				html
 			})
 
-			// Log success
-			await db.insert(emailHistory).values({
-				...metadata,
-				recipient: to,
-				subject,
-				sentAt: new Date(),
-				status: "sent"
-			})
+			// Log success and return the inserted ID
+			const result = await db
+				.insert(emailHistory)
+				.values({
+					...metadata,
+					recipient: to,
+					subject,
+					sentAt: new Date(),
+					status: "sent"
+				})
+				.returning({ id: emailHistory.id })
 
-			console.log(`✓ Email sent to ${to}: ${subject}`)
+			const ccInfo = cc ? ` (CC: ${cc.join(", ")})` : ""
+			console.log(`✓ Email sent to ${to}${ccInfo}: ${subject}`)
+			if (!result[0]) {
+				throw new Error("Failed to insert email history record")
+			}
+			return result[0].id
 		} catch (error) {
 			const errorMessage =
 				error instanceof Error ? error.message : String(error)
 
 			// Log failure
-			await db.insert(emailHistory).values({
-				...metadata,
-				recipient: to,
-				subject,
-				sentAt: new Date(),
-				status: "failed",
-				errorMessage
-			})
+			const result = await db
+				.insert(emailHistory)
+				.values({
+					...metadata,
+					recipient: to,
+					subject,
+					sentAt: new Date(),
+					status: "failed",
+					errorMessage
+				})
+				.returning({ id: emailHistory.id })
 
 			console.error(`✗ Failed to send email to ${to}: ${errorMessage}`)
-			throw error
+			if (!result[0]) {
+				throw new Error("Failed to insert email history record")
+			}
+			return result[0].id
 		}
 	}
 
 	async sendCheckoutConfirmation(
-		data: CheckoutEmailProps & { itemId: string; checkoutData: any }
+		data: CheckoutConfirmationProps & {
+			itemId: string
+			checkoutData: CheckoutEmailData
+		}
 	): Promise<void> {
-		const html = render(CheckoutConfirmationEmail(data))
+		const html = await render(h(CheckoutConfirmation, data))
 		const subject = `Checkout Confirmation: ${data.assetName}`
 
-		// Send to user if they have an email
+		// Send to user with admins CC'd, or send to admins if no user email
 		if (data.personEmail) {
-			await this.sendEmail(data.personEmail, subject, html, {
-				itemType: "checkout",
-				itemId: data.itemId,
-				isAdmin: false,
-				isLate: false,
-				needsManualSend: false,
-				data: data.checkoutData
-			})
-		}
-
-		// Send to all admins
-		for (const adminEmail of this.config.adminEmails) {
-			await this.sendEmail(adminEmail, `[Admin] ${subject}`, html, {
-				itemType: "checkout",
-				itemId: data.itemId,
-				isAdmin: true,
-				isLate: false,
-				needsManualSend: false,
-				data: data.checkoutData
-			})
+			await this.sendEmail(
+				data.personEmail,
+				subject,
+				html,
+				{
+					itemType: "checkout",
+					itemId: data.itemId,
+					isAdmin: false,
+					isLate: false,
+					needsManualSend: false,
+					data: data.checkoutData
+				},
+				this.config.adminEmails
+			)
+		} else {
+			// No user email, send to admins only
+			for (const adminEmail of this.config.adminEmails) {
+				await this.sendEmail(adminEmail, `[Admin] ${subject}`, html, {
+					itemType: "checkout",
+					itemId: data.itemId,
+					isAdmin: true,
+					isLate: false,
+					needsManualSend: false,
+					data: data.checkoutData
+				})
+			}
 		}
 	}
 
 	async sendReservationConfirmation(
-		data: ReservationEmailProps & { itemId: string; reservationData: any }
+		data: ReservationConfirmationProps & {
+			itemId: string
+			reservationData: ReservationEmailData
+		}
 	): Promise<void> {
-		const html = render(ReservationConfirmationEmail(data))
+		const html = await render(h(ReservationConfirmation, data))
 		const subject = `Reservation Confirmation: ${data.assetName}`
 
-		// Send to user if they have an email
+		// Send to user with admins CC'd, or send to admins if no user email
 		if (data.personEmail) {
-			await this.sendEmail(data.personEmail, subject, html, {
-				itemType: "reservation",
-				itemId: data.itemId,
-				isAdmin: false,
-				isLate: false,
-				needsManualSend: false,
-				data: data.reservationData
-			})
-		}
-
-		// Send to all admins
-		for (const adminEmail of this.config.adminEmails) {
-			await this.sendEmail(adminEmail, `[Admin] ${subject}`, html, {
-				itemType: "reservation",
-				itemId: data.itemId,
-				isAdmin: true,
-				isLate: false,
-				needsManualSend: false,
-				data: data.reservationData
-			})
+			await this.sendEmail(
+				data.personEmail,
+				subject,
+				html,
+				{
+					itemType: "reservation",
+					itemId: data.itemId,
+					isAdmin: false,
+					isLate: false,
+					needsManualSend: false,
+					data: data.reservationData
+				},
+				this.config.adminEmails
+			)
+		} else {
+			// No user email, send to admins only
+			for (const adminEmail of this.config.adminEmails) {
+				await this.sendEmail(adminEmail, `[Admin] ${subject}`, html, {
+					itemType: "reservation",
+					itemId: data.itemId,
+					isAdmin: true,
+					isLate: false,
+					needsManualSend: false,
+					data: data.reservationData
+				})
+			}
 		}
 	}
 
 	async sendRepairNotification(
-		data: RepairEmailProps & { itemId: string; repairData: any }
+		data: RepairNotificationProps & {
+			itemId: string
+			repairData: RepairEmailData
+		}
 	): Promise<void> {
-		const html = render(RepairNotificationEmail(data))
+		const html = await render(h(RepairNotification, data))
 		const subject = `Repair Notification: ${data.assetName}`
 
 		// Send to all admins only
@@ -166,14 +242,18 @@ export class EmailService {
 	}
 
 	async sendLateNotification(
-		data: LateNotificationEmailProps & { itemId: string; itemData: any }
+		data: LateNotificationProps & {
+			itemId: string
+			itemData: CheckoutEmailData | ReservationEmailData
+		}
 	): Promise<void> {
-		const html = render(LateNotificationEmail(data))
+		// Render HTML without emailId first
+		const htmlWithoutId = await render(h(LateNotification, data))
 		const subject = `[LATE] ${data.itemType === "checkout" ? "Checkout" : "Reservation"}: ${data.assetName}`
 
 		// Send to admins only, mark as needs manual send
 		for (const adminEmail of this.config.adminEmails) {
-			await this.sendEmail(adminEmail, subject, html, {
+			await this.sendEmail(adminEmail, subject, htmlWithoutId, {
 				itemType: data.itemType,
 				itemId: data.itemId,
 				isAdmin: true,
@@ -185,31 +265,36 @@ export class EmailService {
 	}
 
 	async resendEmail(historyId: number): Promise<void> {
+		const { eq } = await import("drizzle-orm")
+
 		const [record] = await db
 			.select()
 			.from(emailHistory)
-			.where((t) => t.id === historyId)
+			.where(eq(emailHistory.id, historyId))
 			.limit(1)
 
 		if (!record) {
 			throw new Error("Email history record not found")
 		}
 
-		const data = record.data as any
+		const data = record.data as EmailData
 
 		// Determine which template to use based on item type
 		let html: string
 		let subject: string
 
-		if (record.itemType === "checkout") {
-			html = render(CheckoutConfirmationEmail(data))
-			subject = `Checkout Confirmation: ${data.assetName}`
-		} else if (record.itemType === "reservation") {
-			html = render(ReservationConfirmationEmail(data))
-			subject = `Reservation Confirmation: ${data.assetName}`
+		if (record.itemType === "checkout" && "checkoutDate" in data) {
+			const checkoutData = data as CheckoutEmailData
+			html = await render(h(CheckoutConfirmation, checkoutData))
+			subject = `Checkout Confirmation: ${checkoutData.assetName}`
+		} else if (record.itemType === "reservation" && "startDate" in data) {
+			const reservationData = data as ReservationEmailData
+			html = await render(h(ReservationConfirmation, reservationData))
+			subject = `Reservation Confirmation: ${reservationData.assetName}`
 		} else if (record.itemType === "repair") {
-			html = render(RepairNotificationEmail(data))
-			subject = `Repair Notification: ${data.assetName}`
+			const repairData = data as RepairEmailData
+			html = await render(h(RepairNotification, repairData))
+			subject = `Repair Notification: ${repairData.assetName}`
 		} else {
 			throw new Error(`Unknown item type: ${record.itemType}`)
 		}

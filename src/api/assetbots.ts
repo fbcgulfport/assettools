@@ -105,7 +105,7 @@ export class AssetBotsClient {
 			)
 		}
 
-		return response.json()
+		return response.json() as Promise<T>
 	}
 
 	async getAssets(params?: {

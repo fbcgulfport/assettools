@@ -1,17 +1,17 @@
-import { AssetBotsClient } from "./src/api/assetbots"
-import { EmailService } from "./src/services/email"
-import { AssetPoller } from "./src/services/poller"
-import { createWebServer } from "./src/web/server"
+import { AssetBotsClient } from "~/api/assetbots"
+import { EmailService } from "~/services/email"
+import { AssetPoller } from "~/services/poller"
+import { createWebServer } from "~/web/server"
 
 // Load environment variables
 const ASSETBOTS_API_KEY = process.env.ASSETBOTS_API_KEY
 const ASSETBOTS_API_URL =
 	process.env.ASSETBOTS_API_URL || "https://api.assetbots.com/v1"
-const CHECK_MINUTES = Number.parseInt(process.env.CHECK_MINUTES || "1")
-const PORT = Number.parseInt(process.env.PORT || "3000")
+const CHECK_MINUTES = Number.parseInt(process.env.CHECK_MINUTES || "1", 10)
+const PORT = Number.parseInt(process.env.PORT || "3000", 10)
 
 const SMTP_HOST = process.env.SMTP_HOST
-const SMTP_PORT = Number.parseInt(process.env.SMTP_PORT || "587")
+const SMTP_PORT = Number.parseInt(process.env.SMTP_PORT || "587", 10)
 const SMTP_SECURE = process.env.SMTP_SECURE === "true"
 const SMTP_USER = process.env.SMTP_USER
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD
@@ -80,7 +80,7 @@ const poller = new AssetPoller(assetBotsClient, emailService)
 poller.start(CHECK_MINUTES)
 
 // Start the web server
-const server = createWebServer({
+const _server = createWebServer({
 	port: PORT,
 	emailService
 })

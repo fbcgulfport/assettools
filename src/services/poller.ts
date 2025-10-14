@@ -3,8 +3,6 @@ import type { Asset, AssetBotsClient } from "../api/assetbots"
 import { db, type NewProcessedItem, processedItems } from "../db"
 import type { EmailService } from "./email"
 
-const TWO_HOURS_MS = 2 * 60 * 60 * 1000
-
 export class AssetPoller {
 	private client: AssetBotsClient
 	private emailService: EmailService

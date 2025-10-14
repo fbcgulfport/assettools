@@ -22,7 +22,10 @@ export function createWebServer(config: WebServerConfig) {
 
 			// API: Get email history
 			if (url.pathname === "/api/emails") {
-				const limit = Number.parseInt(url.searchParams.get("limit") || "100")
+				const limit = Number.parseInt(
+					url.searchParams.get("limit") || "100",
+					10
+				)
 				const emails = await db
 					.select()
 					.from(emailHistory)
@@ -37,10 +40,10 @@ export function createWebServer(config: WebServerConfig) {
 			// API: Resend email
 			if (url.pathname === "/api/resend" && req.method === "POST") {
 				try {
-					const body = await req.json()
+					const body = (await req.json()) as { id?: number }
 					const { id } = body
 
-					if (!id) {
+					if (!id || typeof id !== "number") {
 						return new Response(
 							JSON.stringify({ error: "Email ID required" }),
 							{
