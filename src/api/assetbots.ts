@@ -3,63 +3,80 @@ export interface AssetBotsConfig {
 	apiUrl: string
 }
 
-export interface Asset {
+export interface Category {
 	id: string
 	name: string
-	serialNumber?: string
+}
+
+export interface Label {
+	id: string
+	name: string
+}
+
+export interface Asset {
+	id: string
+	category?: Category
 	checkout?: Checkout
-	reservation?: Reservation
 	repair?: Repair
-	createdDate?: string
-	updatedDate?: string
+	description?: string
+	tag?: string
+	labels?: Label[]
+	archived?: boolean
+	createDate?: string
+	updateDate?: string
 }
 
 export interface Checkout {
 	id: string
-	assetId: string
-	personId?: string
-	locationId?: string
-	person?: Person
-	location?: Location
+	assets?: Asset[]
 	date: string
 	dueDate?: string
-	notes?: string
-	createdDate?: string
-}
-
-export interface Reservation {
-	id: string
-	assetId: string
-	personId?: string
+	location?: Location
 	person?: Person
-	startDate: string
-	endDate: string
-	notes?: string
-	createdDate?: string
+	status: string
 }
 
 export interface Repair {
 	id: string
-	assetId: string
-	assignedId?: string
-	status?: string
-	description?: string
+	assets?: Asset[]
+	assigned?: Person
 	dueDate?: string
+	description?: string
+	status: string
 	repairDate?: string
-	createdDate?: string
 }
 
 export interface Person {
 	id: string
-	firstName?: string
-	lastName?: string
-	email?: string
-	name?: string
+	name: string
+	labels?: Label[]
+	archived?: boolean
+	createDate?: string
+	updateDate?: string
+}
+
+export interface Address {
+	street1?: string
+	street2?: string
+	city?: string
+	state?: string
+	zip?: string
+	country?: string
 }
 
 export interface Location {
 	id: string
-	name?: string
+	name: string
+	address?: Address
+	labels?: Label[]
+	archived?: boolean
+	createDate?: string
+	updateDate?: string
+}
+
+// Helper function to get a display name for an asset
+export function getAssetName(asset: Asset): string {
+	return asset.tag || asset.description || asset.id
 }
 
 export class AssetBotsClient {
@@ -112,7 +129,7 @@ export class AssetBotsClient {
 		limit?: number
 		offset?: number
 		$filter?: string
-	}): Promise<Asset[]> {
+	}): Promise<{ data: Asset[] }> {
 		const queryParams = new URLSearchParams()
 		if (params?.limit) queryParams.set("limit", params.limit.toString())
 		if (params?.offset) queryParams.set("offset", params.offset.toString())
@@ -121,19 +138,19 @@ export class AssetBotsClient {
 		const query = queryParams.toString()
 		const endpoint = `/assets${query ? `?${query}` : ""}`
 
-		return this.request<Asset[]>(endpoint)
+		return this.request<{ data: Asset[] }>(endpoint)
 	}
 
-	async getCheckout(id: string): Promise<Checkout> {
-		return this.request<Checkout>(`/checkouts/${id}`)
+	async getCheckout(id: string): Promise<{ data: Checkout }> {
+		return this.request<{ data: Checkout }>(`/checkouts/${id}`)
 	}
 
-	async getRepair(id: string): Promise<Repair> {
-		return this.request<Repair>(`/repairs/${id}`)
+	async getRepair(id: string): Promise<{ data: Repair }> {
+		return this.request<{ data: Repair }>(`/repairs/${id}`)
 	}
 
-	// Fetch recent assets with checkouts, repairs, or reservations
-	// Since the API doesn't have list endpoints for checkouts/repairs/reservations,
+	// Fetch recent assets with checkouts or repairs
+	// Since the API doesn't have list endpoints for checkouts/repairs,
 	// we need to fetch assets and check for recent changes
 	async getRecentAssets(sinceDate: Date): Promise<Asset[]> {
 		// Fetch assets in batches, looking for recent updates
@@ -147,27 +164,21 @@ export class AssetBotsClient {
 		for (let page = 0; page < 5; page++) {
 			const assets = await this.getAssets({ limit, offset })
 
-			if (assets.length === 0) break
+			if (assets.data.length === 0) break
 
-			// Filter for assets with recent checkouts, repairs, or reservations
-			const recentAssets = assets.filter((asset) => {
-				const checkoutRecent =
-					asset.checkout?.createdDate &&
-					asset.checkout.createdDate >= sinceTimestamp
-				const repairRecent =
-					asset.repair?.createdDate &&
-					asset.repair.createdDate >= sinceTimestamp
-				const reservationRecent =
-					asset.reservation?.createdDate &&
-					asset.reservation.createdDate >= sinceTimestamp
-
-				return checkoutRecent || repairRecent || reservationRecent
+			// Filter for assets with recent checkouts or repairs
+			// Note: We use updateDate since checkout/repair don't have their own timestamps
+			const recentAssets = assets.data.filter((asset) => {
+				if (!asset.updateDate) return false
+				return (
+					asset.updateDate >= sinceTimestamp && (asset.checkout || asset.repair)
+				)
 			})
 
 			allAssets.push(...recentAssets)
 
 			// If we got fewer than the limit, we've reached the end
-			if (assets.length < limit) break
+			if (assets.data.length < limit) break
 
 			offset += limit
 		}

@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm"
 import type { Asset, AssetBotsClient } from "../api/assetbots"
+import { getAssetName } from "../api/assetbots"
 import { db, type NewProcessedItem, processedItems } from "../db"
 import type { EmailService } from "./email"
 
@@ -49,57 +50,49 @@ export class AssetPoller {
 			return
 		}
 
-		const createdDate = checkout.createdDate
-			? new Date(checkout.createdDate)
-			: new Date()
+		const checkoutDate = new Date(checkout.date)
 		const hoursSinceCreation =
-			(Date.now() - createdDate.getTime()) / (1000 * 60 * 60)
+			(Date.now() - checkoutDate.getTime()) / (1000 * 60 * 60)
 		const isLate = hoursSinceCreation > 2
 
-		console.log(`Processing checkout: ${checkoutId} for asset ${asset.name}`)
+		const assetName = getAssetName(asset)
+		console.log(`Processing checkout: ${checkoutId} for asset ${assetName}`)
 
-		const personName = checkout.person
-			? `${checkout.person.firstName || ""} ${checkout.person.lastName || ""}`.trim() ||
-				checkout.person.name ||
-				"Unknown"
-			: "Unknown"
+		const personName = checkout.person?.name || "Unknown"
 
 		if (isLate) {
 			// Send late notification to admins only
 			await this.emailService.sendLateNotification({
 				itemType: "checkout",
-				assetName: asset.name,
+				assetName,
 				personName,
-				personEmail: checkout.person?.email,
+				personEmail: undefined, // API doesn't provide email on person
 				date: checkout.date,
 				hoursLate: Math.round(hoursSinceCreation),
 				itemId: checkoutId,
 				itemData: {
-					assetName: asset.name,
+					assetName,
 					personName,
-					personEmail: checkout.person?.email,
+					personEmail: undefined,
 					checkoutDate: checkout.date,
-					dueDate: checkout.dueDate,
-					notes: checkout.notes
+					dueDate: checkout.dueDate
 				}
 			})
 		} else {
 			// Send normal confirmation
 			await this.emailService.sendCheckoutConfirmation({
-				assetName: asset.name,
+				assetName,
 				personName,
-				personEmail: checkout.person?.email,
+				personEmail: undefined, // API doesn't provide email on person
 				checkoutDate: checkout.date,
 				dueDate: checkout.dueDate,
-				notes: checkout.notes,
 				itemId: checkoutId,
 				checkoutData: {
-					assetName: asset.name,
+					assetName,
 					personName,
-					personEmail: checkout.person?.email,
+					personEmail: undefined,
 					checkoutDate: checkout.date,
-					dueDate: checkout.dueDate,
-					notes: checkout.notes
+					dueDate: checkout.dueDate
 				}
 			})
 		}
@@ -109,85 +102,7 @@ export class AssetPoller {
 			itemType: "checkout",
 			itemId: checkoutId,
 			assetId: asset.id,
-			createdAt: createdDate,
-			processedAt: new Date()
-		})
-	}
-
-	private async processReservation(asset: Asset): Promise<void> {
-		if (!asset.reservation) return
-
-		const reservation = asset.reservation
-		const reservationId = reservation.id
-
-		// Check if already processed
-		if (await this.isProcessed("reservation", reservationId)) {
-			return
-		}
-
-		const createdDate = reservation.createdDate
-			? new Date(reservation.createdDate)
-			: new Date()
-		const hoursSinceCreation =
-			(Date.now() - createdDate.getTime()) / (1000 * 60 * 60)
-		const isLate = hoursSinceCreation > 2
-
-		console.log(
-			`Processing reservation: ${reservationId} for asset ${asset.name}`
-		)
-
-		const personName = reservation.person
-			? `${reservation.person.firstName || ""} ${reservation.person.lastName || ""}`.trim() ||
-				reservation.person.name ||
-				"Unknown"
-			: "Unknown"
-
-		if (isLate) {
-			// Send late notification to admins only
-			await this.emailService.sendLateNotification({
-				itemType: "reservation",
-				assetName: asset.name,
-				personName,
-				personEmail: reservation.person?.email,
-				date: reservation.startDate,
-				hoursLate: Math.round(hoursSinceCreation),
-				itemId: reservationId,
-				itemData: {
-					assetName: asset.name,
-					personName,
-					personEmail: reservation.person?.email,
-					startDate: reservation.startDate,
-					endDate: reservation.endDate,
-					notes: reservation.notes
-				}
-			})
-		} else {
-			// Send normal confirmation
-			await this.emailService.sendReservationConfirmation({
-				assetName: asset.name,
-				personName,
-				personEmail: reservation.person?.email,
-				startDate: reservation.startDate,
-				endDate: reservation.endDate,
-				notes: reservation.notes,
-				itemId: reservationId,
-				reservationData: {
-					assetName: asset.name,
-					personName,
-					personEmail: reservation.person?.email,
-					startDate: reservation.startDate,
-					endDate: reservation.endDate,
-					notes: reservation.notes
-				}
-			})
-		}
-
-		// Mark as processed
-		await this.markProcessed({
-			itemType: "reservation",
-			itemId: reservationId,
-			assetId: asset.id,
-			createdAt: createdDate,
+			createdAt: checkoutDate,
 			processedAt: new Date()
 		})
 	}
@@ -203,22 +118,23 @@ export class AssetPoller {
 			return
 		}
 
-		const createdDate = repair.createdDate
-			? new Date(repair.createdDate)
+		const assetName = getAssetName(asset)
+		const createdDate = asset.updateDate
+			? new Date(asset.updateDate)
 			: new Date()
 
-		console.log(`Processing repair: ${repairId} for asset ${asset.name}`)
+		console.log(`Processing repair: ${repairId} for asset ${assetName}`)
 
 		// Repairs always go to admins only, no late logic
 		await this.emailService.sendRepairNotification({
-			assetName: asset.name,
+			assetName,
 			status: repair.status,
 			description: repair.description,
 			dueDate: repair.dueDate,
 			repairDate: repair.repairDate,
 			itemId: repairId,
 			repairData: {
-				assetName: asset.name,
+				assetName,
 				status: repair.status,
 				description: repair.description,
 				dueDate: repair.dueDate,
@@ -258,11 +174,6 @@ export class AssetPoller {
 					// Process checkout if exists
 					if (asset.checkout) {
 						await this.processCheckout(asset)
-					}
-
-					// Process reservation if exists
-					if (asset.reservation) {
-						await this.processReservation(asset)
 					}
 
 					// Process repair if exists

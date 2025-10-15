@@ -82,7 +82,8 @@ poller.start(CHECK_MINUTES)
 // Start the web server
 const _server = createWebServer({
 	port: PORT,
-	emailService
+	emailService,
+	assetBotsClient
 })
 
 console.log(`\n✓ Web UI running at http://localhost:${PORT}`)
