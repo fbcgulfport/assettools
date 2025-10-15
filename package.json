@@ -8,6 +8,7 @@
 		"dev": "bun run --watch src/index.ts",
 		"db:push": "drizzle-kit push",
 		"email": "email dev --dir src/emails",
+		"setup:gmail": "bun scripts/setup-gmail.ts",
 		"lint": "biome check . --write",
 		"typecheck": "tsc --noEmit"
 	},
@@ -15,7 +16,6 @@
 		"@biomejs/biome": "2.2.6",
 		"@react-email/preview-server": "4.3.0",
 		"@types/bun": "1.3.0",
-		"@types/nodemailer": "7.0.2",
 		"@types/react": "19.2.2",
 		"@types/react-dom": "19.2.2",
 		"drizzle-kit": "0.31.5",
@@ -27,7 +27,7 @@
 		"@react-email/render": "1.3.2",
 		"@react-email/tailwind": "^1.2.2",
 		"drizzle-orm": "0.44.6",
-		"nodemailer": "7.0.9",
+		"googleapis": "162.0.0",
 		"react": "19.2.0",
 		"react-dom": "19.2.0"
 	}

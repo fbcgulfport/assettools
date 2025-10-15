@@ -39,3 +39,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Drizzle migrations
 drizzle/
+
+# Gmail API credentials
+gmail-credentials.json
+.gmail-token.json

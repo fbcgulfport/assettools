@@ -10,11 +10,15 @@ const ASSETBOTS_API_URL =
 const CHECK_MINUTES = Number.parseInt(process.env.CHECK_MINUTES || "1", 10)
 const PORT = Number.parseInt(process.env.PORT || "3000", 10)
 
-const SMTP_HOST = process.env.SMTP_HOST
-const SMTP_PORT = Number.parseInt(process.env.SMTP_PORT || "587", 10)
-const SMTP_SECURE = process.env.SMTP_SECURE === "true"
-const SMTP_USER = process.env.SMTP_USER
-const SMTP_PASSWORD = process.env.SMTP_PASSWORD
+const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID
+const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET
+const GMAIL_REDIRECT_URI =
+	process.env.GMAIL_REDIRECT_URI || "http://localhost:3001"
+const GMAIL_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN
+const GMAIL_ACCESS_TOKEN = process.env.GMAIL_ACCESS_TOKEN
+const GMAIL_TOKEN_EXPIRY = process.env.GMAIL_TOKEN_EXPIRY
+	? Number.parseInt(process.env.GMAIL_TOKEN_EXPIRY, 10)
+	: undefined
 
 const FROM_EMAIL = process.env.FROM_EMAIL
 const FROM_NAME = process.env.FROM_NAME || "Asset Management System"
@@ -27,9 +31,12 @@ if (!ASSETBOTS_API_KEY) {
 	process.exit(1)
 }
 
-if (!SMTP_HOST || !SMTP_USER || !SMTP_PASSWORD) {
+if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
 	console.error(
-		"Error: SMTP credentials are required (SMTP_HOST, SMTP_USER, SMTP_PASSWORD)"
+		"Error: Gmail API credentials are required (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN)"
+	)
+	console.error(
+		"Run `bun scripts/setup-gmail.ts` to set up Gmail API credentials"
 	)
 	process.exit(1)
 }
@@ -60,13 +67,12 @@ const assetBotsClient = new AssetBotsClient({
 })
 
 const emailService = new EmailService({
-	host: SMTP_HOST,
-	port: SMTP_PORT,
-	secure: SMTP_SECURE,
-	auth: {
-		user: SMTP_USER,
-		pass: SMTP_PASSWORD
-	},
+	clientId: GMAIL_CLIENT_ID,
+	clientSecret: GMAIL_CLIENT_SECRET,
+	redirectUri: GMAIL_REDIRECT_URI,
+	refreshToken: GMAIL_REFRESH_TOKEN,
+	accessToken: GMAIL_ACCESS_TOKEN,
+	tokenExpiry: GMAIL_TOKEN_EXPIRY,
 	from: {
 		email: FROM_EMAIL,
 		name: FROM_NAME

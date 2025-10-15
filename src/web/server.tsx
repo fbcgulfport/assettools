@@ -19,7 +19,7 @@ export function createWebServer(config: WebServerConfig) {
 		},
 		async fetch(req) {
 			const url = new URL(req.url)
-		// API: Get email history
+			// API: Get email history
 			if (url.pathname === "/api/emails") {
 				const limit = Number.parseInt(
 					url.searchParams.get("limit") || "100",

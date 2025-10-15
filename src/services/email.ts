@@ -1,5 +1,5 @@
 import { render } from "@react-email/render"
-import nodemailer from "nodemailer"
+import { google } from "googleapis"
 import { createElement as h } from "react"
 import { db, emailHistory, type NewEmailHistory } from "../db"
 import CheckoutConfirmation, {
@@ -48,13 +48,12 @@ export type EmailData =
 	| RepairEmailData
 
 export interface EmailConfig {
-	host: string
-	port: number
-	secure: boolean
-	auth: {
-		user: string
-		pass: string
-	}
+	clientId: string
+	clientSecret: string
+	redirectUri: string
+	refreshToken: string
+	accessToken?: string
+	tokenExpiry?: number
 	from: {
 		email: string
 		name: string
@@ -63,17 +62,29 @@ export interface EmailConfig {
 }
 
 export class EmailService {
-	private transporter: nodemailer.Transporter
+	private oauth2Client: any
+	private gmail: any
 	private config: EmailConfig
 
 	constructor(config: EmailConfig) {
 		this.config = config
-		this.transporter = nodemailer.createTransport({
-			host: config.host,
-			port: config.port,
-			secure: config.secure,
-			auth: config.auth
+
+		// Initialize OAuth2 client
+		this.oauth2Client = new google.auth.OAuth2(
+			config.clientId,
+			config.clientSecret,
+			config.redirectUri
+		)
+
+		// Set credentials
+		this.oauth2Client.setCredentials({
+			refresh_token: config.refreshToken,
+			access_token: config.accessToken,
+			expiry_date: config.tokenExpiry
 		})
+
+		// Initialize Gmail API
+		this.gmail = google.gmail({ version: "v1", auth: this.oauth2Client })
 	}
 
 	private async sendEmail(
@@ -87,13 +98,34 @@ export class EmailService {
 		cc?: string[]
 	): Promise<number> {
 		try {
-			await this.transporter.sendMail({
-				from: `${this.config.from.name} <${this.config.from.email}>`,
-				to,
-				cc,
-				replyTo: this.config.adminEmails[0], // Reply to first admin email
-				subject,
-				html
+			// Create email message in RFC 2822 format
+			const headers = [
+				`From: ${this.config.from.name} <${this.config.from.email}>`,
+				`To: ${to}`,
+				cc && cc.length > 0 ? `Cc: ${cc.join(", ")}` : "",
+				`Reply-To: ${this.config.adminEmails[0]}`,
+				`Subject: ${subject}`,
+				"MIME-Version: 1.0",
+				"Content-Type: text/html; charset=utf-8"
+			]
+				.filter(Boolean)
+				.join("\r\n")
+
+			const message = `${headers}\r\n\r\n${html}`
+
+			// Encode message in base64url format
+			const encodedMessage = Buffer.from(message)
+				.toString("base64")
+				.replace(/\+/g, "-")
+				.replace(/\//g, "_")
+				.replace(/=+$/, "")
+
+			// Send via Gmail API
+			await this.gmail.users.messages.send({
+				userId: "me",
+				requestBody: {
+					raw: encodedMessage
+				}
 			})
 
 			// Log success and return the inserted ID
