@@ -231,4 +231,84 @@ export class AssetBotsClient {
 
 		return allAssets
 	}
+
+	async getPeople(params?: {
+		limit?: number
+		offset?: number
+		$filter?: string
+	}): Promise<{ data: Person[] }> {
+		const queryParams = new URLSearchParams()
+		if (params?.limit) queryParams.set("limit", params.limit.toString())
+		if (params?.offset) queryParams.set("offset", params.offset.toString())
+		if (params?.$filter) queryParams.set("$filter", params.$filter)
+
+		const query = queryParams.toString()
+		const endpoint = `/people${query ? `?${query}` : ""}`
+
+		return this.request<{ data: Person[] }>(endpoint)
+	}
+
+	async getLocations(params?: {
+		limit?: number
+		offset?: number
+		$filter?: string
+	}): Promise<{ data: Location[] }> {
+		const queryParams = new URLSearchParams()
+		if (params?.limit) queryParams.set("limit", params.limit.toString())
+		if (params?.offset) queryParams.set("offset", params.offset.toString())
+		if (params?.$filter) queryParams.set("$filter", params.$filter)
+
+		const query = queryParams.toString()
+		const endpoint = `/locations${query ? `?${query}` : ""}`
+
+		return this.request<{ data: Location[] }>(endpoint)
+	}
+
+	async getAllPeople(): Promise<Person[]> {
+		const limit = 1000
+		let offset = 0
+		const allPeople: Person[] = []
+
+		for (let page = 0; page < 5; page++) {
+			const people = await this.getPeople({ limit, offset })
+
+			if (people.data.length === 0) break
+
+			// Filter out archived people
+			const activePeople = people.data.filter((person) => !person.archived)
+
+			allPeople.push(...activePeople)
+
+			if (people.data.length < limit) break
+
+			offset += limit
+		}
+
+		return allPeople
+	}
+
+	async getAllLocations(): Promise<Location[]> {
+		const limit = 1000
+		let offset = 0
+		const allLocations: Location[] = []
+
+		for (let page = 0; page < 5; page++) {
+			const locations = await this.getLocations({ limit, offset })
+
+			if (locations.data.length === 0) break
+
+			// Filter out archived locations
+			const activeLocations = locations.data.filter(
+				(location) => !location.archived
+			)
+
+			allLocations.push(...activeLocations)
+
+			if (locations.data.length < limit) break
+
+			offset += limit
+		}
+
+		return allLocations
+	}
 }

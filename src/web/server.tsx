@@ -83,50 +83,34 @@ export function createWebServer(config: WebServerConfig) {
 
 			// API: Get unique locations
 			if (url.pathname === "/api/locations") {
-				const allAssets = await config.assetBotsClient.getAllAssets()
-				const locations = new Map<string, { id: string; name: string }>()
+				const allLocations = await config.assetBotsClient.getAllLocations()
 
-				for (const asset of allAssets) {
-					const location = asset.checkout?.value.location?.value
-					if (location?.id && location?.name) {
-						locations.set(location.id, { id: location.id, name: location.name })
-					}
-				}
+				const locations = allLocations
+					.map((location) => ({
+						id: location.id,
+						name: location.name
+					}))
+					.sort((a, b) => a.name.localeCompare(b.name))
 
-				return new Response(
-					JSON.stringify(
-						Array.from(locations.values()).sort((a, b) =>
-							a.name.localeCompare(b.name)
-						)
-					),
-					{
-						headers: { "Content-Type": "application/json" }
-					}
-				)
+				return new Response(JSON.stringify(locations), {
+					headers: { "Content-Type": "application/json" }
+				})
 			}
 
 			// API: Get unique people
 			if (url.pathname === "/api/people") {
-				const allAssets = await config.assetBotsClient.getAllAssets()
-				const people = new Map<string, { id: string; name: string }>()
+				const allPeople = await config.assetBotsClient.getAllPeople()
 
-				for (const asset of allAssets) {
-					const person = asset.checkout?.value.person?.value
-					if (person?.id && person?.name) {
-						people.set(person.id, { id: person.id, name: person.name })
-					}
-				}
+				const people = allPeople
+					.map((person) => ({
+						id: person.id,
+						name: person.name
+					}))
+					.sort((a, b) => a.name.localeCompare(b.name))
 
-				return new Response(
-					JSON.stringify(
-						Array.from(people.values()).sort((a, b) =>
-							a.name.localeCompare(b.name)
-						)
-					),
-					{
-						headers: { "Content-Type": "application/json" }
-					}
-				)
+				return new Response(JSON.stringify(people), {
+					headers: { "Content-Type": "application/json" }
+				})
 			}
 
 			// API: Get filtered assets
