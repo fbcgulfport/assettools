@@ -51,13 +51,24 @@ if (ADMIN_EMAILS.length === 0) {
 	process.exit(1)
 }
 
+const NODE_ENV = process.env.NODE_ENV || "development"
+const DISABLE_EMAILS = process.env.DISABLE_EMAILS === "true"
+
 console.log("=".repeat(60))
 console.log("Asset Tools - Starting up...")
 console.log("=".repeat(60))
+console.log(`Environment: ${NODE_ENV}`)
 console.log(`API URL: ${ASSETBOTS_API_URL}`)
 console.log(`Check Interval: ${CHECK_MINUTES} minute(s)`)
 console.log(`Admin Emails: ${ADMIN_EMAILS.join(", ")}`)
 console.log(`Web UI Port: ${PORT}`)
+if (NODE_ENV !== "production") {
+	console.log("\n⚠️  Running in DEV mode - automatic emails are DISABLED")
+	console.log("   (Manual emails from the web UI will still work)")
+} else if (DISABLE_EMAILS) {
+	console.log("\n⚠️  User emails are DISABLED")
+	console.log("   (Admin emails will still be sent)")
+}
 console.log("=".repeat(60))
 
 // Initialize services

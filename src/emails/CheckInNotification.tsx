@@ -1,36 +1,30 @@
 import { Section, Text } from "@react-email/components"
 import BaseLayout from "./BaseLayout"
 
-export interface CheckoutConfirmationProps {
+export interface CheckInNotificationProps {
 	assetName: string
 	personName: string
-	personEmail?: string
 	checkoutDate: string
-	dueDate?: string
-	notes?: string
+	checkInDate: string
 	category?: string
-	returnTo?: string
+	daysOut?: number
 }
 
-export default function CheckoutConfirmation({
+export default function CheckInNotification({
 	assetName,
 	personName,
 	checkoutDate,
-	dueDate,
-	notes,
+	checkInDate,
 	category,
-	returnTo
-}: CheckoutConfirmationProps) {
+	daysOut
+}: CheckInNotificationProps) {
 	return (
 		<BaseLayout
-			title="Checkout Confirmation"
-			previewText={`${personName} checked out ${assetName}`}
+			title="Asset Checked In"
+			previewText={`${assetName} has been checked back in`}
 		>
 			<Text className="text-base font-light text-text leading-relaxed">
-				{personName},
-			</Text>
-			<Text className="text-base font-light text-text leading-relaxed">
-				You have checked out <strong>{assetName}</strong>.
+				<strong>{assetName}</strong> has been checked back in.
 			</Text>
 
 			<Section className="bg-gray-50 border border-gray-200 p-5 my-5">
@@ -65,6 +59,18 @@ export default function CheckoutConfirmation({
 						<tr>
 							<td className="py-2 pr-4 align-top w-[35%]">
 								<Text className="text-sm font-semibold text-gray-600 m-0">
+									Checked Out By:
+								</Text>
+							</td>
+							<td className="py-2 align-top">
+								<Text className="text-sm font-light text-text m-0">
+									{personName}
+								</Text>
+							</td>
+						</tr>
+						<tr>
+							<td className="py-2 pr-4 align-top w-[35%]">
+								<Text className="text-sm font-semibold text-gray-600 m-0">
 									Checked Out:
 								</Text>
 							</td>
@@ -74,30 +80,28 @@ export default function CheckoutConfirmation({
 								</Text>
 							</td>
 						</tr>
-						{dueDate && (
+						<tr>
+							<td className="py-2 pr-4 align-top w-[35%]">
+								<Text className="text-sm font-semibold text-gray-600 m-0">
+									Checked In:
+								</Text>
+							</td>
+							<td className="py-2 align-top">
+								<Text className="text-sm font-light text-text m-0">
+									{checkInDate}
+								</Text>
+							</td>
+						</tr>
+						{daysOut !== undefined && (
 							<tr>
 								<td className="py-2 pr-4 align-top w-[35%]">
 									<Text className="text-sm font-semibold text-gray-600 m-0">
-										Due Date:
+										Duration:
 									</Text>
 								</td>
 								<td className="py-2 align-top">
 									<Text className="text-sm font-light text-text m-0">
-										{dueDate}
-									</Text>
-								</td>
-							</tr>
-						)}
-						{returnTo && (
-							<tr>
-								<td className="py-2 pr-4 align-top w-[35%]">
-									<Text className="text-sm font-semibold text-gray-600 m-0">
-										Return To:
-									</Text>
-								</td>
-								<td className="py-2 align-top">
-									<Text className="text-sm font-light text-text m-0">
-										{returnTo}
+										{daysOut} {daysOut === 1 ? "day" : "days"}
 									</Text>
 								</td>
 							</tr>
@@ -106,32 +110,18 @@ export default function CheckoutConfirmation({
 				</table>
 			</Section>
 
-			{notes && (
-				<>
-					<Text className="text-sm font-semibold text-gray-600 m-0">
-						Notes:
-					</Text>
-					<Text className="text-sm font-light text-text leading-snug bg-gray-50 p-3 border border-gray-200 my-2 mb-4">
-						{notes}
-					</Text>
-				</>
-			)}
-
 			<Text className="text-base font-light text-text leading-relaxed">
-				{dueDate ? "Please return the asset by the due date. " : ""}
-				If you have any questions, please let us know.
+				This is an automated notification for administrative tracking.
 			</Text>
 		</BaseLayout>
 	)
 }
 
-CheckoutConfirmation.PreviewProps = {
+CheckInNotification.PreviewProps = {
 	assetName: "Canon EOS R5",
 	personName: "John Smith",
-	personEmail: "john.smith@example.com",
 	checkoutDate: "January 15, 2025",
-	dueDate: "January 22, 2025",
-	notes: "Please handle with care and return fully charged.",
+	checkInDate: "January 18, 2025",
 	category: "Cameras",
-	returnTo: "Media Office"
-} as CheckoutConfirmationProps
+	daysOut: 3
+} as CheckInNotificationProps

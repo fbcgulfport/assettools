@@ -31,7 +31,16 @@ export function createWebServer(config: WebServerConfig) {
 					.orderBy(desc(emailHistory.sentAt))
 					.limit(limit)
 
-				return new Response(JSON.stringify(emails), {
+				// Ensure dates are properly serialized as ISO strings
+				const serializedEmails = emails.map((email) => ({
+					...email,
+					sentAt:
+						email.sentAt instanceof Date
+							? email.sentAt.toISOString()
+							: email.sentAt
+				}))
+
+				return new Response(JSON.stringify(serializedEmails), {
 					headers: { "Content-Type": "application/json" }
 				})
 			}
@@ -45,7 +54,13 @@ export function createWebServer(config: WebServerConfig) {
 				)
 				const assets = await config.assetBotsClient.getAssets({ limit, offset })
 
-				return new Response(JSON.stringify(assets), {
+				// Filter out archived assets
+				const filteredAssets = {
+					...assets,
+					data: assets.data.filter((asset) => !asset.archived)
+				}
+
+				return new Response(JSON.stringify(filteredAssets), {
 					headers: { "Content-Type": "application/json" }
 				})
 			}
@@ -91,47 +106,72 @@ export function createWebServer(config: WebServerConfig) {
 
 					// Send appropriate email based on type
 					const assetName = getAssetName(asset)
+					const category = asset.category?.value
+					const returnTo = undefined // TODO: Extract from custom fields
 
 					if (emailType === "checkout" && asset.checkout) {
 						const { checkout } = asset
-						const personName = checkout.person?.name || "Unknown"
+						const checkoutValue = checkout.value
+						const hasPerson = !!checkoutValue.person
+						const personName = checkoutValue.person?.value.name || "Unknown"
+						const locationName = checkoutValue.location?.value.name
+
+						// Only send checkout confirmation if there's a person
+						// Location-only checkouts don't need confirmation emails
+						if (!hasPerson) {
+							return new Response(
+								JSON.stringify({
+									error: `Cannot send checkout email: checked out to location only (${locationName})`
+								}),
+								{
+									status: 400,
+									headers: { "Content-Type": "application/json" }
+								}
+							)
+						}
 
 						await config.emailService.sendCheckoutConfirmation({
 							itemId: checkout.id,
 							assetName,
 							personName,
 							personEmail: undefined, // API doesn't provide email on person
-							checkoutDate: checkout.date,
-							dueDate: checkout.dueDate,
+							checkoutDate: checkoutValue.date,
+							dueDate: checkoutValue.dueDate,
+							category,
+							returnTo,
 							checkoutData: {
 								assetName,
 								personName,
 								personEmail: undefined,
-								checkoutDate: checkout.date,
-								dueDate: checkout.dueDate
+								checkoutDate: checkoutValue.date,
+								dueDate: checkoutValue.dueDate,
+								category,
+								returnTo
 							}
 						})
 					} else if (emailType === "repair" && asset.repair) {
 						const { repair } = asset
+						const repairValue = repair.value
 						await config.emailService.sendRepairNotification({
 							itemId: repair.id,
 							assetName,
-							status: repair.status,
-							description: repair.description,
-							dueDate: repair.dueDate,
-							repairDate: repair.repairDate,
+							status: repairValue.status,
+							description: repairValue.description,
+							dueDate: repairValue.dueDate,
+							repairDate: repairValue.repairDate,
 							repairData: {
 								assetName,
-								status: repair.status,
-								description: repair.description,
-								dueDate: repair.dueDate,
-								repairDate: repair.repairDate
+								status: repairValue.status,
+								description: repairValue.description,
+								dueDate: repairValue.dueDate,
+								repairDate: repairValue.repairDate
 							}
 						})
 					} else if (emailType === "late" && asset.checkout) {
 						const { checkout } = asset
-						const personName = checkout.person?.name || "Unknown"
-						const checkoutDate = new Date(checkout.date)
+						const checkoutValue = checkout.value
+						const personName = checkoutValue.person?.value.name || "Unknown"
+						const checkoutDate = new Date(checkoutValue.date)
 						const now = new Date()
 						const hoursLate = Math.floor(
 							(now.getTime() - checkoutDate.getTime()) / (1000 * 60 * 60)
@@ -143,18 +183,22 @@ export function createWebServer(config: WebServerConfig) {
 							assetName,
 							personName,
 							personEmail: undefined, // API doesn't provide email on person
-							date: new Date(checkout.date).toLocaleDateString("en-US", {
+							date: new Date(checkoutValue.date).toLocaleDateString("en-US", {
 								year: "numeric",
 								month: "long",
 								day: "numeric"
 							}),
 							hoursLate,
+							category,
+							returnTo,
 							itemData: {
 								assetName,
 								personName,
 								personEmail: undefined,
-								checkoutDate: checkout.date,
-								dueDate: checkout.dueDate
+								checkoutDate: checkoutValue.date,
+								dueDate: checkoutValue.dueDate,
+								category,
+								returnTo
 							}
 						})
 					} else {

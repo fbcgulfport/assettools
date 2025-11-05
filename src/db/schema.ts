@@ -28,7 +28,19 @@ export const emailHistory = sqliteTable("email_history", {
 	data: text("data", { mode: "json" }) // Store the full item data for resending
 })
 
+// Track active checkouts to detect check-ins
+export const activeCheckouts = sqliteTable("active_checkouts", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	assetId: text("asset_id").notNull(),
+	checkoutId: text("checkout_id").notNull(),
+	checkoutDate: integer("checkout_date", { mode: "timestamp" }).notNull(),
+	status: text("status").notNull(), // 'active', 'completed'
+	completedAt: integer("completed_at", { mode: "timestamp" })
+})
+
 export type ProcessedItem = typeof processedItems.$inferSelect
 export type NewProcessedItem = typeof processedItems.$inferInsert
 export type EmailHistory = typeof emailHistory.$inferSelect
 export type NewEmailHistory = typeof emailHistory.$inferInsert
+export type ActiveCheckout = typeof activeCheckouts.$inferSelect
+export type NewActiveCheckout = typeof activeCheckouts.$inferInsert

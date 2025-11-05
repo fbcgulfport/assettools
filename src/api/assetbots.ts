@@ -15,7 +15,11 @@ export interface Label {
 
 export interface Asset {
 	id: string
-	category?: Category
+	category?: {
+		id: string
+		type: string
+		value: string // Category is just a string, not an object
+	}
 	checkout?: Checkout
 	repair?: Repair
 	description?: string
@@ -26,24 +30,73 @@ export interface Asset {
 	updateDate?: string
 }
 
-export interface Checkout {
-	id: string
-	assets?: Asset[]
+export interface CheckoutValue {
 	date: string
 	dueDate?: string
-	location?: Location
-	person?: Person
+	location?: {
+		id: string
+		type: string
+		value: Location
+	}
+	person?: {
+		id: string
+		type: string
+		value: Person
+	}
 	status: string
 }
 
-export interface Repair {
+export interface Checkout {
 	id: string
-	assets?: Asset[]
-	assigned?: Person
+	type: string
+	value: CheckoutValue
+}
+
+// Direct checkout API response (different structure than embedded in assets)
+export interface CheckoutDetails {
+	id: string
+	type: string
+	status: string
+	date: string
+	dueDate?: string
+	person?: {
+		id: string
+		type: string
+		value: Person
+	}
+	location?: {
+		id: string
+		type: string
+		value: Location
+	}
+	assets?: Array<{
+		id: string
+		type: string
+		value: {
+			description?: string
+			tag?: string
+		}
+	}>
+	createDate?: string
+	updateDate?: string
+}
+
+export interface RepairValue {
+	assigned?: {
+		id: string
+		type: string
+		value: Person
+	}
 	dueDate?: string
 	description?: string
 	status: string
 	repairDate?: string
+}
+
+export interface Repair {
+	id: string
+	type: string
+	value: RepairValue
 }
 
 export interface Person {
@@ -141,41 +194,34 @@ export class AssetBotsClient {
 		return this.request<{ data: Asset[] }>(endpoint)
 	}
 
-	async getCheckout(id: string): Promise<{ data: Checkout }> {
-		return this.request<{ data: Checkout }>(`/checkouts/${id}`)
+	async getCheckout(id: string): Promise<CheckoutDetails | null> {
+		const response = await this.request<{ data: CheckoutDetails[] }>(
+			`/checkouts/${id}`
+		)
+		return response.data[0] || null
 	}
 
 	async getRepair(id: string): Promise<{ data: Repair }> {
 		return this.request<{ data: Repair }>(`/repairs/${id}`)
 	}
 
-	// Fetch recent assets with checkouts or repairs
-	// Since the API doesn't have list endpoints for checkouts/repairs,
-	// we need to fetch assets and check for recent changes
-	async getRecentAssets(sinceDate: Date): Promise<Asset[]> {
-		// Fetch assets in batches, looking for recent updates
+	// Fetch all assets
+	async getAllAssets(): Promise<Asset[]> {
+		// Fetch assets in batches
 		const limit = 1000 // Max allowed
 		let offset = 0
 		const allAssets: Asset[] = []
-		const sinceTimestamp = sinceDate.toISOString()
 
-		// We'll fetch up to 5000 assets (5 pages) to find recent changes
-		// This is a limitation of the API - in production you might want to adjust this
+		// Fetch up to 5000 assets (5 pages)
 		for (let page = 0; page < 5; page++) {
 			const assets = await this.getAssets({ limit, offset })
 
 			if (assets.data.length === 0) break
 
-			// Filter for assets with recent checkouts or repairs
-			// Note: We use updateDate since checkout/repair don't have their own timestamps
-			const recentAssets = assets.data.filter((asset) => {
-				if (!asset.updateDate) return false
-				return (
-					asset.updateDate >= sinceTimestamp && (asset.checkout || asset.repair)
-				)
-			})
+			// Filter out archived assets only
+			const activeAssets = assets.data.filter((asset) => !asset.archived)
 
-			allAssets.push(...recentAssets)
+			allAssets.push(...activeAssets)
 
 			// If we got fewer than the limit, we've reached the end
 			if (assets.data.length < limit) break

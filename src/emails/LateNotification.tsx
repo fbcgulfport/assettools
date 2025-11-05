@@ -9,6 +9,8 @@ export interface LateNotificationProps {
 	date: string
 	hoursLate: number
 	emailId?: number
+	category?: string
+	returnTo?: string
 }
 
 export default function LateNotification({
@@ -18,7 +20,9 @@ export default function LateNotification({
 	personEmail,
 	date,
 	hoursLate,
-	emailId
+	emailId,
+	category,
+	returnTo
 }: LateNotificationProps) {
 	const itemTypeLabel = itemType === "checkout" ? "Checkout" : "Reservation"
 
@@ -66,6 +70,34 @@ export default function LateNotification({
 								</Text>
 							</td>
 						</tr>
+						{category && (
+							<tr>
+								<td className="py-2 pr-4 align-top w-[35%]">
+									<Text className="text-sm font-semibold text-gray-600 m-0">
+										Category:
+									</Text>
+								</td>
+								<td className="py-2 align-top">
+									<Text className="text-sm font-light text-text m-0">
+										{category}
+									</Text>
+								</td>
+							</tr>
+						)}
+						{returnTo && (
+							<tr>
+								<td className="py-2 pr-4 align-top w-[35%]">
+									<Text className="text-sm font-semibold text-gray-600 m-0">
+										Return To:
+									</Text>
+								</td>
+								<td className="py-2 align-top">
+									<Text className="text-sm font-light text-text m-0">
+										{returnTo}
+									</Text>
+								</td>
+							</tr>
+						)}
 						<tr>
 							<td className="py-2 pr-4 align-top w-[35%]">
 								<Text className="text-sm font-semibold text-gray-600 m-0">
@@ -145,5 +177,7 @@ LateNotification.PreviewProps = {
 	personEmail: "mike.johnson@example.com",
 	date: "January 12, 2025",
 	hoursLate: 8,
-	emailId: 123
+	emailId: 123,
+	category: "Drones",
+	returnTo: "Media Office"
 } as LateNotificationProps

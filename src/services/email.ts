@@ -2,6 +2,9 @@ import { render } from "@react-email/render"
 import { google } from "googleapis"
 import { createElement as h } from "react"
 import { db, emailHistory, type NewEmailHistory } from "../db"
+import CheckInNotification, {
+	type CheckInNotificationProps
+} from "../emails/CheckInNotification"
 import CheckoutConfirmation, {
 	type CheckoutConfirmationProps
 } from "../emails/CheckoutConfirmation"
@@ -23,6 +26,8 @@ export interface CheckoutEmailData {
 	checkoutDate: string
 	dueDate?: string
 	notes?: string
+	category?: string
+	returnTo?: string
 }
 
 export interface ReservationEmailData {
@@ -42,10 +47,20 @@ export interface RepairEmailData {
 	repairDate?: string
 }
 
+export interface CheckInEmailData {
+	assetName: string
+	personName: string
+	checkoutDate: string
+	checkInDate: string
+	category?: string
+	daysOut?: number
+}
+
 export type EmailData =
 	| CheckoutEmailData
 	| ReservationEmailData
 	| RepairEmailData
+	| CheckInEmailData
 
 export interface EmailConfig {
 	clientId: string
@@ -171,17 +186,46 @@ export class EmailService {
 		}
 	}
 
+	async logSkippedEmail(
+		recipient: string,
+		subject: string,
+		metadata: Omit<
+			NewEmailHistory,
+			"sentAt" | "status" | "errorMessage" | "recipient" | "subject"
+		>,
+		reason: string
+	): Promise<void> {
+		await db.insert(emailHistory).values({
+			...metadata,
+			recipient,
+			subject,
+			sentAt: new Date(),
+			status: "skipped",
+			errorMessage: reason
+		})
+		console.log(`⊘ Email skipped for ${recipient}: ${reason}`)
+	}
+
 	async sendCheckoutConfirmation(
 		data: CheckoutConfirmationProps & {
 			itemId: string
 			checkoutData: CheckoutEmailData
 		}
 	): Promise<void> {
+		// Only send emails in production
+		if (process.env.NODE_ENV !== "production") {
+			return
+		}
+
 		const html = await render(h(CheckoutConfirmation, data))
 		const subject = `Checkout Confirmation: ${data.assetName}`
 
 		// Send to user with admins CC'd, or send to admins if no user email
 		if (data.personEmail) {
+			// Check if user emails are disabled
+			if (process.env.DISABLE_EMAILS === "true") {
+				return
+			}
 			await this.sendEmail(
 				data.personEmail,
 				subject,
@@ -217,11 +261,20 @@ export class EmailService {
 			reservationData: ReservationEmailData
 		}
 	): Promise<void> {
+		// Only send emails in production
+		if (process.env.NODE_ENV !== "production") {
+			return
+		}
+
 		const html = await render(h(ReservationConfirmation, data))
 		const subject = `Reservation Confirmation: ${data.assetName}`
 
 		// Send to user with admins CC'd, or send to admins if no user email
 		if (data.personEmail) {
+			// Check if user emails are disabled
+			if (process.env.DISABLE_EMAILS === "true") {
+				return
+			}
 			await this.sendEmail(
 				data.personEmail,
 				subject,
@@ -257,6 +310,11 @@ export class EmailService {
 			repairData: RepairEmailData
 		}
 	): Promise<void> {
+		// Only send emails in production
+		if (process.env.NODE_ENV !== "production") {
+			return
+		}
+
 		const html = await render(h(RepairNotification, data))
 		const subject = `Repair Notification: ${data.assetName}`
 
@@ -273,12 +331,44 @@ export class EmailService {
 		}
 	}
 
+	async sendCheckInNotification(
+		data: CheckInNotificationProps & {
+			itemId: string
+			checkInData: CheckInEmailData
+		}
+	): Promise<void> {
+		// Only send emails in production
+		if (process.env.NODE_ENV !== "production") {
+			return
+		}
+
+		const html = await render(h(CheckInNotification, data))
+		const subject = `Check-In: ${data.assetName}`
+
+		// Send to all admins only
+		for (const adminEmail of this.config.adminEmails) {
+			await this.sendEmail(adminEmail, subject, html, {
+				itemType: "checkin",
+				itemId: data.itemId,
+				isAdmin: true,
+				isLate: false,
+				needsManualSend: false,
+				data: data.checkInData
+			})
+		}
+	}
+
 	async sendLateNotification(
 		data: LateNotificationProps & {
 			itemId: string
 			itemData: CheckoutEmailData | ReservationEmailData
 		}
 	): Promise<void> {
+		// Only send emails in production
+		if (process.env.NODE_ENV !== "production") {
+			return
+		}
+
 		// Render HTML without emailId first
 		const htmlWithoutId = await render(h(LateNotification, data))
 		const subject = `[LATE] ${data.itemType === "checkout" ? "Checkout" : "Reservation"}: ${data.assetName}`

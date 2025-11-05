@@ -142,6 +142,11 @@
 			color: #721c24;
 		}
 
+		.badge.skipped {
+			background: #e2e3e5;
+			color: #383d41;
+		}
+
 		.badge.admin {
 			background: #cce5ff;
 			color: #004085;
@@ -165,6 +170,11 @@
 		.badge.repair {
 			background: #ffe6e6;
 			color: #c82333;
+		}
+
+		.badge.checkin {
+			background: #d1ecf1;
+			color: #0c5460;
 		}
 
 		button {
@@ -253,12 +263,12 @@
 					<div class="value" id="sent-emails">0</div>
 				</div>
 				<div class="stat-card">
-					<h3>Failed</h3>
-					<div class="value" id="failed-emails">0</div>
+					<h3>Skipped</h3>
+					<div class="value" id="skipped-emails">0</div>
 				</div>
 				<div class="stat-card">
-					<h3>Late Notifications</h3>
-					<div class="value" id="late-emails">0</div>
+					<h3>Failed</h3>
+					<div class="value" id="failed-emails">0</div>
 				</div>
 			</div>
 
@@ -329,13 +339,13 @@
 		function updateStats() {
 			const total = emails.length;
 			const sent = emails.filter(e => e.status === 'sent').length;
+			const skipped = emails.filter(e => e.status === 'skipped').length;
 			const failed = emails.filter(e => e.status === 'failed').length;
-			const late = emails.filter(e => e.is_late).length;
 
 			document.getElementById('total-emails').textContent = total;
 			document.getElementById('sent-emails').textContent = sent;
+			document.getElementById('skipped-emails').textContent = skipped;
 			document.getElementById('failed-emails').textContent = failed;
-			document.getElementById('late-emails').textContent = late;
 		}
 
 		function renderEmails() {
@@ -348,28 +358,33 @@
 
 			tbody.innerHTML = emails.map(email => {
 				const badges = [];
-				badges.push(`<span class="badge ${email.item_type}">${email.item_type}</span>`);
+				badges.push(`<span class="badge ${email.itemType}">${email.itemType}</span>`);
 				badges.push(`<span class="badge ${email.status}">${email.status}</span>`);
-				if (email.is_admin) badges.push('<span class="badge admin">Admin</span>');
-				if (email.is_late) badges.push('<span class="badge late">Late</span>');
+				if (email.isAdmin) badges.push('<span class="badge admin">Admin</span>');
+				if (email.isLate) badges.push('<span class="badge late">Late</span>');
 
-				const showResend = email.status === 'failed' || email.needs_manual_send;
+				const showResend = email.status === 'failed' || email.status === 'skipped' || email.needsManualSend;
+
+				// Status display with icon and reason
+				let statusDisplay = email.status;
+				if (email.status === 'failed') {
+					statusDisplay = `<span title="${email.errorMessage || 'Unknown error'}" style="color: #dc3545;">✗ Failed</span>`;
+				} else if (email.status === 'skipped') {
+					statusDisplay = `<span title="${email.errorMessage || 'Skipped'}" style="color: #6c757d;">⊘ Skipped</span>`;
+				} else if (email.status === 'sent') {
+					statusDisplay = '<span style="color: #28a745;">✓ Sent</span>';
+				}
 
 				return `
                     <tr>
-                        <td>${formatDate(email.sent_at)}</td>
+                        <td>${formatDate(email.sentAt)}</td>
                         <td>${badges.join(' ')}</td>
                         <td>${email.recipient}</td>
                         <td>${email.subject}</td>
-                        <td>
-                            ${email.error_message ?
-						`<span title="${email.error_message}" style="color: #dc3545;">⚠️ ${email.status}</span>` :
-						email.status
-					}
-                        </td>
+                        <td>${statusDisplay}</td>
                         <td>
                             ${showResend ?
-						`<button onclick="resendEmail(${email.id})">Resend</button>` :
+						`<button onclick="resendEmail(${email.id})">Send Now</button>` :
 						'-'
 					}
                         </td>
@@ -514,7 +529,7 @@
 					checkedOutTo = parts.length > 0 ? parts.join(' @ ') : 'Reserved';
 				} else if (asset.repair) {
 					statusBadge = '<span class="badge repair">Needs Repair</span>';
-					checkedOutTo = asset.repair.description || 'In Repair';
+					checkedOutTo = asset.repair.value.description || 'In Repair';
 				} else {
 					statusBadge = '<span class="badge" style="background: #d4edda; color: #155724;">Available</span>';
 				}
@@ -522,9 +537,13 @@
 				// Email action buttons - only show when appropriate
 				const emailButtons = [];
 
-				// Checkout email - only if checked out
+				// Checkout email - only if checked out to a person (not location-only)
 				if (asset.checkout) {
-					emailButtons.push(`<button onclick="sendAssetEmail('${asset.id}', 'checkout')">Checkout Email</button>`);
+					const hasPerson = asset.checkout.value.person;
+
+					if (hasPerson) {
+						emailButtons.push(`<button onclick="sendAssetEmail('${asset.id}', 'checkout')">Checkout Email</button>`);
+					}
 
 					// Late email - only if checked out and past due date
 					if (asset.checkout.value.dueDate && new Date(asset.checkout.value.dueDate) < new Date()) {
