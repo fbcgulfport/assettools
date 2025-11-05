@@ -311,4 +311,32 @@ export class AssetBotsClient {
 
 		return allLocations
 	}
+
+	async getLocationAssets(
+		locationId: string,
+		params?: { limit?: number; offset?: number }
+	): Promise<{ data: Asset[] }> {
+		const queryParams = new URLSearchParams()
+		if (params?.limit) queryParams.set("limit", params.limit.toString())
+		if (params?.offset) queryParams.set("offset", params.offset.toString())
+
+		const query = queryParams.toString()
+		const endpoint = `/locations/${locationId}/assets${query ? `?${query}` : ""}`
+
+		return this.request<{ data: Asset[] }>(endpoint)
+	}
+
+	async getPersonAssets(
+		personId: string,
+		params?: { limit?: number; offset?: number }
+	): Promise<{ data: Asset[] }> {
+		const queryParams = new URLSearchParams()
+		if (params?.limit) queryParams.set("limit", params.limit.toString())
+		if (params?.offset) queryParams.set("offset", params.offset.toString())
+
+		const query = queryParams.toString()
+		const endpoint = `/people/${personId}/assets${query ? `?${query}` : ""}`
+
+		return this.request<{ data: Asset[] }>(endpoint)
+	}
 }

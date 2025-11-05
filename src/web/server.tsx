@@ -133,28 +133,51 @@ export function createWebServer(config: WebServerConfig) {
 					)
 				}
 
-				const allAssets = await config.assetBotsClient.getAllAssets()
+				let result: { data: import("../api/assetbots").Asset[] }
+				let total = 0
 
-				const filteredAssets = allAssets.filter((asset) => {
-					if (filterType === "category") {
-						return asset.category?.value === filterValue
-					}
-					if (filterType === "location") {
-						return asset.checkout?.value.location?.value.id === filterValue
-					}
-					if (filterType === "person") {
-						return asset.checkout?.value.person?.value.id === filterValue
-					}
-					return false
-				})
-
-				// Apply pagination
-				const paginatedAssets = filteredAssets.slice(offset, offset + limit)
+				if (filterType === "location") {
+					// Use dedicated location assets endpoint
+					result = await config.assetBotsClient.getLocationAssets(filterValue, {
+						limit,
+						offset
+					})
+					// Filter out archived assets
+					result.data = result.data.filter((asset) => !asset.archived)
+					total = result.data.length
+				} else if (filterType === "person") {
+					// Use dedicated person assets endpoint
+					result = await config.assetBotsClient.getPersonAssets(filterValue, {
+						limit,
+						offset
+					})
+					// Filter out archived assets
+					result.data = result.data.filter((asset) => !asset.archived)
+					total = result.data.length
+				} else if (filterType === "category") {
+					// Use $filter parameter with OData syntax
+					result = await config.assetBotsClient.getAssets({
+						limit,
+						offset,
+						$filter: `category eq '${filterValue}'`
+					})
+					// Filter out archived assets
+					result.data = result.data.filter((asset) => !asset.archived)
+					total = result.data.length
+				} else {
+					return new Response(
+						JSON.stringify({ error: "Invalid filter type" }),
+						{
+							status: 400,
+							headers: { "Content-Type": "application/json" }
+						}
+					)
+				}
 
 				return new Response(
 					JSON.stringify({
-						data: paginatedAssets,
-						total: filteredAssets.length
+						data: result.data,
+						total
 					}),
 					{
 						headers: { "Content-Type": "application/json" }
