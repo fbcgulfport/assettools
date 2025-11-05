@@ -5,6 +5,6 @@ import * as schema from "./schema"
 
 const sqlite = new Database("assettools.db")
 export const db = drizzle(sqlite, { schema })
-await migrate(db)
+await migrate(db, { migrationsFolder: "./drizzle" })
 
 export * from "./schema"
