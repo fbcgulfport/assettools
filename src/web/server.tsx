@@ -65,6 +65,119 @@ export function createWebServer(config: WebServerConfig) {
 				})
 			}
 
+			// API: Get unique categories
+			if (url.pathname === "/api/categories") {
+				const allAssets = await config.assetBotsClient.getAllAssets()
+				const categories = new Set<string>()
+
+				for (const asset of allAssets) {
+					if (asset.category?.value) {
+						categories.add(asset.category.value)
+					}
+				}
+
+				return new Response(JSON.stringify(Array.from(categories).sort()), {
+					headers: { "Content-Type": "application/json" }
+				})
+			}
+
+			// API: Get unique locations
+			if (url.pathname === "/api/locations") {
+				const allAssets = await config.assetBotsClient.getAllAssets()
+				const locations = new Map<string, { id: string; name: string }>()
+
+				for (const asset of allAssets) {
+					const location = asset.checkout?.value.location?.value
+					if (location?.id && location?.name) {
+						locations.set(location.id, { id: location.id, name: location.name })
+					}
+				}
+
+				return new Response(
+					JSON.stringify(
+						Array.from(locations.values()).sort((a, b) =>
+							a.name.localeCompare(b.name)
+						)
+					),
+					{
+						headers: { "Content-Type": "application/json" }
+					}
+				)
+			}
+
+			// API: Get unique people
+			if (url.pathname === "/api/people") {
+				const allAssets = await config.assetBotsClient.getAllAssets()
+				const people = new Map<string, { id: string; name: string }>()
+
+				for (const asset of allAssets) {
+					const person = asset.checkout?.value.person?.value
+					if (person?.id && person?.name) {
+						people.set(person.id, { id: person.id, name: person.name })
+					}
+				}
+
+				return new Response(
+					JSON.stringify(
+						Array.from(people.values()).sort((a, b) =>
+							a.name.localeCompare(b.name)
+						)
+					),
+					{
+						headers: { "Content-Type": "application/json" }
+					}
+				)
+			}
+
+			// API: Get filtered assets
+			if (url.pathname === "/api/assets/filter") {
+				const filterType = url.searchParams.get("type")
+				const filterValue = url.searchParams.get("value")
+				const limit = Number.parseInt(url.searchParams.get("limit") || "50", 10)
+				const offset = Number.parseInt(
+					url.searchParams.get("offset") || "0",
+					10
+				)
+
+				if (!filterType || !filterValue) {
+					return new Response(
+						JSON.stringify({ error: "Filter type and value required" }),
+						{
+							status: 400,
+							headers: { "Content-Type": "application/json" }
+						}
+					)
+				}
+
+				const allAssets = await config.assetBotsClient.getAllAssets()
+
+				const filteredAssets = allAssets.filter((asset) => {
+					if (filterType === "category") {
+						return asset.category?.value === filterValue
+					}
+					if (filterType === "location") {
+						return asset.checkout?.value.location?.value.id === filterValue
+					}
+					if (filterType === "person") {
+						return asset.checkout?.value.person?.value.id === filterValue
+					}
+					return false
+				})
+
+				// Apply pagination
+				const paginatedAssets = filteredAssets.slice(offset, offset + limit)
+
+				return new Response(
+					JSON.stringify({
+						data: paginatedAssets,
+						total: filteredAssets.length
+					}),
+					{
+						headers: { "Content-Type": "application/json" }
+					}
+				)
+			}
+
 			// API: Send email for asset
 			if (url.pathname === "/api/send-email" && req.method === "POST") {
 				try {
