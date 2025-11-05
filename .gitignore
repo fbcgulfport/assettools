@@ -37,8 +37,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.db
 *.db-journal
 
-# Drizzle migrations
-drizzle/
 
 # Gmail API credentials
 gmail-credentials.json
