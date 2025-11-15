@@ -1,67 +1,81 @@
 import { Section, Text } from "@react-email/components"
 import BaseLayout from "./BaseLayout"
 
+type AssetItem = {
+	description: string
+	tag?: string
+	category?: string
+}
+
 export interface CheckoutConfirmationProps {
-	assetName: string
+	assets: AssetItem[]
 	personName: string
 	personEmail?: string
 	checkoutDate: string
 	dueDate?: string
 	notes?: string
-	category?: string
 	returnTo?: string
 }
 
 export default function CheckoutConfirmation({
-	assetName,
+	assets,
 	personName,
 	checkoutDate,
 	dueDate,
 	notes,
-	category,
 	returnTo
 }: CheckoutConfirmationProps) {
+	const assetsList =
+		assets.length === 1
+			? assets[0]!.description
+			: assets.length === 2
+				? `${assets[0]!.description} and ${assets[1]!.description}`
+				: `${assets
+						.slice(0, -1)
+						.map((a) => a.description)
+						.join(", ")}, and ${assets[assets.length - 1]!.description}`
+
 	return (
 		<BaseLayout
 			title="Checkout Confirmation"
-			previewText={`${personName} checked out ${assetName}`}
+			previewText={`${personName} checked out ${assetsList}`}
 		>
 			<Text className="text-base font-light text-text leading-relaxed">
 				{personName},
 			</Text>
 			<Text className="text-base font-light text-text leading-relaxed">
-				You have checked out <strong>{assetName}</strong>.
+				You have checked out the following{" "}
+				{assets.length === 1 ? "item" : "items"}:
 			</Text>
 
 			<Section className="bg-gray-50 border border-gray-200 p-5 my-5">
 				<table className="w-full">
 					<tbody>
-						<tr>
-							<td className="py-2 pr-4 align-top w-[35%]">
-								<Text className="text-sm font-semibold text-gray-600 m-0">
-									Asset:
-								</Text>
-							</td>
-							<td className="py-2 align-top">
-								<Text className="text-sm font-light text-text m-0">
-									{assetName}
-								</Text>
-							</td>
-						</tr>
-						{category && (
-							<tr>
+						{assets.map((asset, index) => (
+							<tr key={asset.tag || asset.description}>
 								<td className="py-2 pr-4 align-top w-[35%]">
 									<Text className="text-sm font-semibold text-gray-600 m-0">
-										Category:
+										{assets.length === 1 ? "Item:" : `Item ${index + 1}:`}
 									</Text>
 								</td>
 								<td className="py-2 align-top">
 									<Text className="text-sm font-light text-text m-0">
-										{category}
+										{asset.description}
+										{asset.tag && (
+											<span className="text-gray-500"> ({asset.tag})</span>
+										)}
 									</Text>
+									{asset.category && (
+										<Text className="text-xs text-gray-500 m-0 mt-1">
+											{asset.category}
+										</Text>
+									)}
 								</td>
 							</tr>
-						)}
+						))}
+						<tr>
+							<td colSpan={2} className="py-2 border-t border-gray-300" />
+						</tr>
 						<tr>
 							<td className="py-2 pr-4 align-top w-[35%]">
 								<Text className="text-sm font-semibold text-gray-600 m-0">
@@ -118,7 +132,9 @@ export default function CheckoutConfirmation({
 			)}
 
 			<Text className="text-base font-light text-text leading-relaxed">
-				{dueDate ? "Please return the asset by the due date. " : ""}
+				{dueDate
+					? `Please return ${assets.length === 1 ? "this item" : "these items"} by the due date. `
+					: ""}
 				If you have any questions, please let us know.
 			</Text>
 		</BaseLayout>
@@ -126,12 +142,22 @@ export default function CheckoutConfirmation({
 }
 
 CheckoutConfirmation.PreviewProps = {
-	assetName: "Canon EOS R5",
+	assets: [
+		{
+			description: "Canon EOS R5 Camera",
+			tag: "CAM-001",
+			category: "Cameras"
+		},
+		{
+			description: "RF 24-70mm f/2.8 Lens",
+			tag: "LENS-042",
+			category: "Lenses"
+		}
+	],
 	personName: "John Smith",
 	personEmail: "john.smith@example.com",
 	checkoutDate: "January 15, 2025",
 	dueDate: "January 22, 2025",
 	notes: "Please handle with care and return fully charged.",
-	category: "Cameras",
 	returnTo: "Media Office"
 } as CheckoutConfirmationProps

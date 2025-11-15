@@ -1,5 +1,5 @@
 import { render } from "@react-email/render"
-import { google } from "googleapis"
+import { type gmail_v1, google } from "googleapis"
 import { createElement as h } from "react"
 import { db, emailHistory, type NewEmailHistory } from "../db"
 import CheckInNotification, {
@@ -19,19 +19,24 @@ import ReservationConfirmation, {
 } from "../emails/ReservationConfirmation"
 
 // Stored email data types
+type AssetItem = {
+	description: string
+	tag?: string
+	category?: string
+}
+
 export interface CheckoutEmailData {
-	assetName: string
+	assets: AssetItem[]
 	personName: string
 	personEmail?: string
 	checkoutDate: string
 	dueDate?: string
 	notes?: string
-	category?: string
 	returnTo?: string
 }
 
 export interface ReservationEmailData {
-	assetName: string
+	assets: AssetItem[]
 	personName: string
 	personEmail?: string
 	startDate: string
@@ -40,7 +45,7 @@ export interface ReservationEmailData {
 }
 
 export interface RepairEmailData {
-	assetName: string
+	assets: AssetItem[]
 	status?: string
 	description?: string
 	dueDate?: string
@@ -48,11 +53,10 @@ export interface RepairEmailData {
 }
 
 export interface CheckInEmailData {
-	assetName: string
+	assets: AssetItem[]
 	personName: string
 	checkoutDate: string
 	checkInDate: string
-	category?: string
 	daysOut?: number
 }
 
@@ -77,8 +81,8 @@ export interface EmailConfig {
 }
 
 export class EmailService {
-	private oauth2Client: any
-	private gmail: any
+	private oauth2Client: InstanceType<typeof google.auth.OAuth2>
+	private gmail: gmail_v1.Gmail
 	private config: EmailConfig
 
 	constructor(config: EmailConfig) {
@@ -117,7 +121,7 @@ export class EmailService {
 			const headers = [
 				`From: ${this.config.from.name} <${this.config.from.email}>`,
 				`To: ${to}`,
-				cc && cc.length > 0 ? `Cc: ${cc.join(", ")}` : "",
+				cc && cc.length > 0 ? `Bcc: ${cc.join(", ")}` : "",
 				`Reply-To: ${this.config.adminEmails[0]}`,
 				`Subject: ${subject}`,
 				"MIME-Version: 1.0",
@@ -218,7 +222,18 @@ export class EmailService {
 		}
 
 		const html = await render(h(CheckoutConfirmation, data))
-		const subject = `Checkout Confirmation: ${data.assetName}`
+		const assetsList =
+			data.assets.length === 1
+				? data.assets[0]!.description
+				: data.assets.length === 2
+					? `${data.assets[0]!.description} and ${data.assets[1]!.description}`
+					: `${data.assets
+							.slice(0, -1)
+							.map((a) => a.description)
+							.join(
+								", "
+							)}, and ${data.assets[data.assets.length - 1]!.description}`
+		const subject = `Checkout Confirmation: ${assetsList}`
 
 		// Send to user with admins CC'd, or send to admins if no user email
 		if (data.personEmail) {
@@ -267,7 +282,18 @@ export class EmailService {
 		}
 
 		const html = await render(h(ReservationConfirmation, data))
-		const subject = `Reservation Confirmation: ${data.assetName}`
+		const assetsList =
+			data.assets.length === 1
+				? data.assets[0]!.description
+				: data.assets.length === 2
+					? `${data.assets[0]!.description} and ${data.assets[1]!.description}`
+					: `${data.assets
+							.slice(0, -1)
+							.map((a) => a.description)
+							.join(
+								", "
+							)}, and ${data.assets[data.assets.length - 1]!.description}`
+		const subject = `Reservation Confirmation: ${assetsList}`
 
 		// Send to user with admins CC'd, or send to admins if no user email
 		if (data.personEmail) {
@@ -316,7 +342,18 @@ export class EmailService {
 		}
 
 		const html = await render(h(RepairNotification, data))
-		const subject = `Repair Notification: ${data.assetName}`
+		const assetsList =
+			data.assets.length === 1
+				? data.assets[0]!.description
+				: data.assets.length === 2
+					? `${data.assets[0]!.description} and ${data.assets[1]!.description}`
+					: `${data.assets
+							.slice(0, -1)
+							.map((a) => a.description)
+							.join(
+								", "
+							)}, and ${data.assets[data.assets.length - 1]!.description}`
+		const subject = `Repair Notification: ${assetsList}`
 
 		// Send to all admins only
 		for (const adminEmail of this.config.adminEmails) {
@@ -343,7 +380,18 @@ export class EmailService {
 		}
 
 		const html = await render(h(CheckInNotification, data))
-		const subject = `Check-In: ${data.assetName}`
+		const assetsList =
+			data.assets.length === 1
+				? data.assets[0]!.description
+				: data.assets.length === 2
+					? `${data.assets[0]!.description} and ${data.assets[1]!.description}`
+					: `${data.assets
+							.slice(0, -1)
+							.map((a) => a.description)
+							.join(
+								", "
+							)}, and ${data.assets[data.assets.length - 1]!.description}`
+		const subject = `Check-In: ${assetsList}`
 
 		// Send to all admins only
 		for (const adminEmail of this.config.adminEmails) {
@@ -371,7 +419,18 @@ export class EmailService {
 
 		// Render HTML without emailId first
 		const htmlWithoutId = await render(h(LateNotification, data))
-		const subject = `[LATE] ${data.itemType === "checkout" ? "Checkout" : "Reservation"}: ${data.assetName}`
+		const assetsList =
+			data.assets.length === 1
+				? data.assets[0]!.description
+				: data.assets.length === 2
+					? `${data.assets[0]!.description} and ${data.assets[1]!.description}`
+					: `${data.assets
+							.slice(0, -1)
+							.map((a) => a.description)
+							.join(
+								", "
+							)}, and ${data.assets[data.assets.length - 1]!.description}`
+		const subject = `[LATE] ${data.itemType === "checkout" ? "Checkout" : "Reservation"}: ${assetsList}`
 
 		// Send to admins only, mark as needs manual send
 		for (const adminEmail of this.config.adminEmails) {
@@ -408,15 +467,48 @@ export class EmailService {
 		if (record.itemType === "checkout" && "checkoutDate" in data) {
 			const checkoutData = data as CheckoutEmailData
 			html = await render(h(CheckoutConfirmation, checkoutData))
-			subject = `Checkout Confirmation: ${checkoutData.assetName}`
+			const assetsList =
+				checkoutData.assets.length === 1
+					? checkoutData.assets[0]!.description
+					: checkoutData.assets.length === 2
+						? `${checkoutData.assets[0]!.description} and ${checkoutData.assets[1]!.description}`
+						: `${checkoutData.assets
+								.slice(0, -1)
+								.map((a) => a.description)
+								.join(
+									", "
+								)}, and ${checkoutData.assets[checkoutData.assets.length - 1]!.description}`
+			subject = `Checkout Confirmation: ${assetsList}`
 		} else if (record.itemType === "reservation" && "startDate" in data) {
 			const reservationData = data as ReservationEmailData
 			html = await render(h(ReservationConfirmation, reservationData))
-			subject = `Reservation Confirmation: ${reservationData.assetName}`
+			const assetsList =
+				reservationData.assets.length === 1
+					? reservationData.assets[0]!.description
+					: reservationData.assets.length === 2
+						? `${reservationData.assets[0]!.description} and ${reservationData.assets[1]!.description}`
+						: `${reservationData.assets
+								.slice(0, -1)
+								.map((a) => a.description)
+								.join(
+									", "
+								)}, and ${reservationData.assets[reservationData.assets.length - 1]!.description}`
+			subject = `Reservation Confirmation: ${assetsList}`
 		} else if (record.itemType === "repair") {
 			const repairData = data as RepairEmailData
 			html = await render(h(RepairNotification, repairData))
-			subject = `Repair Notification: ${repairData.assetName}`
+			const assetsList =
+				repairData.assets.length === 1
+					? repairData.assets[0]!.description
+					: repairData.assets.length === 2
+						? `${repairData.assets[0]!.description} and ${repairData.assets[1]!.description}`
+						: `${repairData.assets
+								.slice(0, -1)
+								.map((a) => a.description)
+								.join(
+									", "
+								)}, and ${repairData.assets[repairData.assets.length - 1]!.description}`
+			subject = `Repair Notification: ${assetsList}`
 		} else {
 			throw new Error(`Unknown item type: ${record.itemType}`)
 		}

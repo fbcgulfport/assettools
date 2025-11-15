@@ -74,12 +74,12 @@ async function authorize(): Promise<void> {
 		scope: SCOPES
 	})
 
-	console.log("\n" + "=".repeat(60))
+	console.log(`\n${"=".repeat(60)}`)
 	console.log("Gmail API Setup - OAuth2 Authorization")
 	console.log("=".repeat(60))
 	console.log("\nPlease authorize this app by visiting this URL:\n")
 	console.log(authUrl)
-	console.log("\n" + "=".repeat(60))
+	console.log(`\n${"=".repeat(60)}`)
 
 	// Start local server to receive the callback
 	const server = createServer(async (req, res) => {
@@ -123,7 +123,9 @@ async function authorize(): Promise<void> {
 	})
 }
 
-async function updateEnvFile(oauth2Client: any): Promise<void> {
+async function updateEnvFile(
+	oauth2Client: InstanceType<typeof google.auth.OAuth2>
+): Promise<void> {
 	const ENV_PATH = ".env"
 	let envContent = ""
 

@@ -4,229 +4,237 @@ Automated monitoring and email notification system for AssetBots API. Tracks new
 
 ## Features
 
-- **Automatic Polling**: Checks AssetBots API at configurable intervals for new activity
+- **Next.js Web App**: Modern React-based admin dashboard with authentication
+- **Google OAuth**: Secure sign-in using better-auth
+- **Automatic Polling**: Background cron job checks AssetBots API at configurable intervals
 - **Smart Email Notifications**:
   - Checkouts: Sends confirmation to user + admin(s)
   - Reservations: Sends confirmation to user + admin(s)
   - Repairs: Sends notification to admin(s) only
-- **Late Detection**: If an item is >2 hours old when first detected, only admin is notified with a prompt to manually send user email
+  - Check-ins: Notifies admins when assets are returned
+- **Late Detection**: Items >1 hour old when detected trigger admin-only notifications
 - **Email History UI**: Web interface showing all sent emails with resend functionality
+- **Asset Browser**: Paginated asset viewing with filtering by category, location, or person
+- **Manual Email Sending**: Send confirmation emails for any asset from the UI
 - **Multiple Admin Support**: Configure multiple admin email addresses
-- **Rate Limiting**: Built-in API rate limiting to respect AssetBots API limits
 - **Persistent Tracking**: SQLite database tracks processed items to prevent duplicate emails
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime installed
 - AssetBots API key
-- SMTP server credentials (Gmail, SendGrid, etc.)
+- Google Cloud OAuth credentials (for both auth and Gmail API)
 
 ## Setup
 
-1. **Clone/Download the project**
-
-2. **Install dependencies**:
+1. **Install dependencies**:
    ```bash
    bun install
    ```
 
-3. **Set up the database**:
+2. **Set up Gmail API**:
    ```bash
-   bun run db:push
+   bun run setup:gmail
    ```
 
-   This uses Drizzle Kit to create the SQLite database and tables.
+   Follow the prompts to authorize the Gmail API. See [GMAIL_SETUP.md](GMAIL_SETUP.md) for details.
 
-4. **Configure environment variables**:
-   ```bash
-   cp .env.example .env
-   ```
+3. **Configure environment variables**:
 
-   Edit `.env` and fill in your values:
+   Copy `.env.example` to `.env` and update:
 
    ```env
-   # AssetBots API Configuration
-   ASSETBOTS_API_KEY=your_api_key_here
+   ASSETBOTS_API_KEY=your_api_key
    ASSETBOTS_API_URL=https://api.assetbots.com/v1
 
-   # Polling Configuration
    CHECK_MINUTES=1
 
-   # Email Configuration
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_SECURE=false
-   SMTP_USER=your_email@gmail.com
-   SMTP_PASSWORD=your_app_password
+   GMAIL_CLIENT_ID=your_client_id
+   GMAIL_CLIENT_SECRET=your_client_secret
+   GMAIL_REDIRECT_URI=http://localhost:3001
+   GMAIL_REFRESH_TOKEN=auto_generated
+   GMAIL_ACCESS_TOKEN=auto_generated
+   GMAIL_TOKEN_EXPIRY=auto_generated
 
-   # Sender email address
-   FROM_EMAIL=noreply@yourdomain.com
-   FROM_NAME=Asset Management System
+   FROM_EMAIL=your_email@domain.com
+   FROM_NAME=Asset Management
 
-   # Admin emails (comma-separated for multiple admins)
-   ADMIN_EMAILS=admin1@example.com,admin2@example.com
+   ADMIN_EMAILS=admin@domain.com
 
-   # Server Configuration
    PORT=3000
+   WEB_URL=http://localhost:3000
+   NEXT_PUBLIC_WEB_URL=http://localhost:3000
+   BETTER_AUTH_SECRET=generate_random_secret
    ```
 
-5. **Customize email templates** (optional):
-
-   Edit `src/emails/templates.tsx` to customize the email templates for your organization.
+4. **Set up the database**:
+   ```bash
+   bun run db:generate
+   bun run db:migrate
+   ```
 
 ## Usage
 
-### Start the application:
+### Development
+
+Run both the Next.js dev server and the background polling cron job:
 
 ```bash
-bun start
-```
-
-Or for development with auto-reload:
-
-```bash
+# Terminal 1 - Next.js app
 bun dev
+
+# Terminal 2 - Background polling
+bun cron
 ```
 
-### Access the Web UI:
+Access the app at `http://localhost:3000`
 
-Open your browser to `http://localhost:3000` (or your configured PORT).
+### Production
 
-The UI displays:
-- Statistics (total emails, sent, failed, late notifications)
-- Email history table with filters
-- Resend button for failed emails or late notifications
+```bash
+bun run build
+bun start  # In one terminal
+bun cron   # In another terminal
+```
+
+### Web Interface
+
+1. Navigate to `http://localhost:3000`
+2. Sign in with Google (uses the same OAuth credentials as Gmail API)
+3. Access the admin dashboard with three tabs:
+   - **Email History**: View all sent emails with statistics
+   - **All Assets**: Browse paginated asset list with manual email buttons
+   - **Filter Assets**: Filter by category, location, or person
 
 ## How It Works
 
+### Architecture
+
+- **Next.js App** (`src/app`): React-based admin interface with API routes
+- **Background Cron** (`src/cron.ts`): Separate process for automated polling
+- **Services** (`src/services`): Email service (Gmail API) and polling logic
+- **Database** (`src/db`): Drizzle ORM with SQLite
+
 ### Polling Process
 
-1. Every `CHECK_MINUTES`, the app queries the AssetBots API for assets with recent changes
-2. Checks each asset for new checkouts, reservations, or repairs
+1. Every `CHECK_MINUTES`, the cron job queries AssetBots API for all assets
+2. Checks each asset for:
+   - New checkouts (person-assigned only)
+   - New repairs
+   - Check-ins (previously checked out assets now returned)
 3. For each new item:
-   - Checks if it's already been processed (to avoid duplicates)
-   - Calculates if it's more than 2 hours old
-   - Sends appropriate emails
-   - Marks item as processed in the database
+   - Checks if already processed (prevents duplicates)
+   - Determines if >1 hour old (triggers late notification)
+   - Sends appropriate emails via Gmail API
+   - Records in email history
 
 ### Email Logic
 
-**Checkouts & Reservations:**
-- If ≤2 hours old: Send confirmation to user (if email available) + all admins
-- If >2 hours old: Send late notification to admins only with prompt to manually send
+**Checkouts:**
+- If ≤1 hour old: Send confirmation to user + admins
+- If >1 hour old: Send late notification to admins only (marked for manual send)
+- Location-only checkouts (no person): No emails sent
 
 **Repairs:**
-- Always send notification to admins only (no user emails)
+- Always send notification to admins only
 
-### Database
+**Check-ins:**
+- Detected when asset no longer has active checkout
+- Sends admin notification with checkout duration
+
+### Database Schema
 
 SQLite database (`assettools.db`) stores:
-- `processed_items`: Tracks which items have been processed to prevent duplicates
-- `email_history`: Complete audit trail of all emails sent (for UI and resending)
+- `user`, `session`, `account`, `verification`: Better-auth tables
+- `processed_items`: Tracks processed items to prevent duplicates
+- `email_history`: Complete audit trail with resend capability
+- `active_checkouts`: Tracks active checkouts for check-in detection
+
+## Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── page.tsx           # Login page (Google OAuth)
+│   ├── admin/
+│   │   ├── page.tsx       # Admin dashboard
+│   │   └── components/    # Dashboard tabs
+│   ├── layout.tsx         # Root layout
+│   ├── globals.css        # Tailwind v4
+│   └── api/               # API route handlers
+│       ├── auth/          # Better-auth handler
+│       ├── emails/        # Email history
+│       ├── assets/        # Asset listings & filtering
+│       ├── send-email/    # Manual email sending
+│       ├── resend/        # Resend failed emails
+│       └── poll/          # Manual poll trigger
+├── api/
+│   └── assetbots.ts       # AssetBots API client
+├── db/
+│   ├── index.ts           # Drizzle connection
+│   └── schema.ts          # Database schema
+├── emails/                # React Email templates
+│   ├── CheckoutConfirmation.tsx
+│   ├── RepairNotification.tsx
+│   ├── CheckInNotification.tsx
+│   ├── LateNotification.tsx
+│   └── BaseLayout.tsx
+├── lib/
+│   ├── auth.ts            # Better-auth server config
+│   ├── auth-client.ts     # Better-auth React hooks
+│   └── clients.ts         # Service singletons
+├── services/
+│   ├── email.ts           # Gmail API email service
+│   └── poller.ts          # Polling logic
+└── cron.ts                # Background polling worker
+```
+
+## Scripts
+
+- `bun dev` - Start Next.js dev server
+- `bun build` - Build for production
+- `bun start` - Start production Next.js server
+- `bun cron` - Run background polling service
+- `bun run db:generate` - Generate Drizzle migrations
+- `bun run db:migrate` - Apply migrations
+- `bun run setup:gmail` - Setup Gmail API OAuth
+- `bun run lint` - Lint and format code
+- `bun run typecheck` - TypeScript type checking
 
 ## Email Templates
 
-The app uses React Email for templates. To customize:
+React Email templates are in `src/emails/`. Customize these files to match your organization's branding.
 
-1. Edit files in `src/emails/templates.tsx`
-2. Available templates:
-   - `CheckoutConfirmationEmail`
-   - `ReservationConfirmationEmail`
-   - `RepairNotificationEmail`
-   - `LateNotificationEmail`
-
-React Email provides great components and styling options. See [React Email docs](https://react.email).
-
-## Rate Limiting
-
-The AssetBots API client includes automatic rate limiting:
-- Minimum 1 second between requests
-- Configurable via `CHECK_MINUTES` to balance freshness vs. API usage
-
-For high-volume environments, consider increasing `CHECK_MINUTES` to reduce API calls.
-
-## Development
-
-### Project Structure
-
-```
-assettools/
-├── index.ts                  # Main entry point
-├── drizzle.config.ts         # Drizzle Kit configuration
-├── src/
-│   ├── api/
-│   │   └── assetbots.ts     # AssetBots API client
-│   ├── db/
-│   │   ├── index.ts         # Database connection
-│   │   └── schema.ts        # Drizzle ORM schema
-│   ├── emails/
-│   │   └── templates.tsx    # React Email templates
-│   ├── services/
-│   │   ├── email.ts         # Email service with nodemailer
-│   │   └── poller.ts        # Polling service
-│   └── web/
-│       └── server.tsx       # Web UI server
-├── .env.example             # Environment template
-└── package.json
-```
-
-### Database Management
-
-The project uses Drizzle ORM with `bun:sqlite` for the database.
-
-**Push schema changes to database:**
+Preview templates during development:
 ```bash
-bun run db:push
+bun run email
 ```
-
-**If you modify the schema** (`src/db/schema.ts`), run `bun run db:push` to apply changes.
-
-**Reset database** (deletes all data):
-```bash
-rm assettools.db
-bun run db:push
-```
-
-### Adding New Features
-
-**New Email Type:**
-1. Add template to `src/emails/templates.tsx`
-2. Add method to `EmailService` in `src/services/email.ts`
-3. Add processing logic to `AssetPoller` in `src/services/poller.ts`
-
-**Custom API Endpoints:**
-1. Add methods to `AssetBotsClient` in `src/api/assetbots.ts`
-2. Update TypeScript interfaces for new data types
 
 ## Troubleshooting
 
 ### Emails not sending
 
-- Check SMTP credentials in `.env`
-- For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833)
-- Check the web UI for error messages in email history
+- Run `bun run setup:gmail` to refresh Gmail API tokens
+- Check `.env` has valid Gmail credentials
+- View error messages in Email History tab
 
 ### Duplicate emails
 
-- The database tracks processed items by ID
-- If you reset the database, it will reprocess all items
-- Delete `assettools.db` only if you want to start fresh
-
-### API rate limiting errors
-
-- Increase `CHECK_MINUTES` in `.env`
-- The client has built-in rate limiting, but AssetBots may have stricter limits
+- Database tracks processed items by ID
+- Deleting `assettools.db` will reprocess all items
 
 ### Not detecting new items
 
 - Verify `ASSETBOTS_API_KEY` is correct
-- Check console logs for API errors
-- The API only scans up to 5000 assets per poll (adjustable in `src/api/assetbots.ts`)
+- Check cron job terminal for API errors
+- Ensure cron process is running
+
+### Authentication issues
+
+- Verify Google OAuth credentials match between better-auth and Gmail API
+- Check `BETTER_AUTH_SECRET` is set
+- Ensure `WEB_URL` and `NEXT_PUBLIC_WEB_URL` are correct
 
 ## License
 
 MIT
-
-## Support
-
-For issues or questions, please file an issue in the repository.

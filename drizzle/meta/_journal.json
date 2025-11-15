@@ -8,6 +8,13 @@
 			"when": 1762362958875,
 			"tag": "0000_easy_bedlam",
 			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "6",
+			"when": 1762454109773,
+			"tag": "0001_lush_puck",
+			"breakpoints": true
 		}
 	]
 }

@@ -4,205 +4,155 @@ This document explains where and how to customize the email templates.
 
 ## Template Location
 
-All email templates are located in: `src/emails/templates.tsx`
+All email templates are located in: `src/emails/`
 
-## Current Templates (Stubbed)
+Each template is a separate React component using React Email.
 
-The following templates are currently stubbed with basic styling. You should customize these for your organization:
+## Current Templates
 
-### 1. CheckoutConfirmationEmail
+### 1. CheckoutConfirmation.tsx
 
-Sent when a checkout is made (≤2 hours old).
-
-**Recipients:** User (if email available) + All admins
-
-**Props:**
-- `assetName`: Name of the asset
-- `personName`: Name of person checking out
-- `personEmail`: Email of person (optional)
-- `checkoutDate`: Date of checkout
-- `dueDate`: Due date (optional)
-- `notes`: Any notes (optional)
-
-### 2. ReservationConfirmationEmail
-
-Sent when a reservation is made (≤2 hours old).
+Sent when a checkout is made (≤1 hour old).
 
 **Recipients:** User (if email available) + All admins
 
 **Props:**
 - `assetName`: Name of the asset
-- `personName`: Name of person reserving
-- `personEmail`: Email of person (optional)
+- `personName`: Person who checked out the asset
+- `personEmail`: Email of the person (if available)
+- `checkoutDate`: When the checkout occurred
+- `dueDate`: When the asset is due back (if set)
+- `category`: Asset category
+- `returnTo`: Where to return the asset (optional)
+
+### 2. RepairNotification.tsx
+
+Sent when an asset needs repair.
+
+**Recipients:** Admins only
+
+**Props:**
+- `assetName`: Name of the asset
+- `status`: Current repair status
+- `description`: Repair description
+- `dueDate`: When repair should be completed
+- `repairDate`: When repair was reported
+
+### 3. CheckInNotification.tsx
+
+Sent when an asset is checked back in.
+
+**Recipients:** Admins only
+
+**Props:**
+- `assetName`: Name of the asset
+- `personName`: Person who had the asset
+- `checkoutDate`: When it was checked out
+- `checkInDate`: When it was checked in
+- `daysOut`: Number of days the asset was out
+- `category`: Asset category
+
+### 4. LateNotification.tsx
+
+Sent when an item is >1 hour old when first detected.
+
+**Recipients:** Admins only
+
+**Props:**
+- `itemType`: Type of item (checkout, reservation, repair)
+- `assetName`: Name of the asset
+- `personName`: Person involved (if applicable)
+- `personEmail`: Person's email (if available)
+- `date`: When the item was created
+- `hoursLate`: How many hours late this notification is
+- `category`: Asset category
+- `returnTo`: Where to return (if applicable)
+
+### 5. ReservationConfirmation.tsx
+
+Sent when a reservation is made.
+
+**Recipients:** User (if email available) + All admins
+
+**Props:**
+- `assetName`: Name of the asset
+- `personName`: Person who reserved the asset
+- `personEmail`: Email of the person (if available)
 - `startDate`: Reservation start date
 - `endDate`: Reservation end date
-- `notes`: Any notes (optional)
+- `notes`: Additional notes (optional)
 
-### 3. RepairNotificationEmail
+### 6. BaseLayout.tsx
 
-Sent when a repair is created.
+Shared layout component used by all email templates for consistent branding.
 
-**Recipients:** All admins only
+**Features:**
+- Responsive design
+- Organization branding (customize colors, logo)
+- Footer with contact information
 
-**Props:**
-- `assetName`: Name of the asset
-- `status`: Repair status (optional)
-- `description`: Repair description (optional)
-- `dueDate`: Due date (optional)
-- `repairDate`: Repair date (optional)
+## Customization
 
-### 4. LateNotificationEmail
+### Styling
 
-Sent when a checkout or reservation is detected >2 hours after creation.
+Each template uses inline styles (required for email clients) via React Email components.
 
-**Recipients:** All admins only
+Common customizations:
+- Colors: Update hex values in style props
+- Fonts: Change font families in inline styles
+- Logo: Add your organization's logo URL in BaseLayout
+- Footer text: Update contact information in BaseLayout
 
-**Props:**
-- `itemType`: 'checkout' or 'reservation'
-- `assetName`: Name of the asset
-- `personName`: Name of person
-- `personEmail`: Email of person (optional)
-- `date`: Date of the checkout/reservation
-- `hoursLate`: Number of hours late
+### Preview Templates
 
-## Customization Guide
-
-### Using React Email Components
-
-React Email provides many useful components. Import what you need:
-
-```tsx
-import {
-  Html,
-  Head,
-  Body,
-  Container,
-  Text,
-  Link,
-  Section,
-  Button,
-  Img,
-  Hr,
-  Heading,
-  Row,
-  Column,
-} from '@react-email/components';
-```
-
-### Example: Adding a Logo
-
-```tsx
-export const CheckoutConfirmationEmail: React.FC<CheckoutEmailProps> = ({
-  assetName,
-  personName,
-  checkoutDate,
-}) => (
-  <Html>
-    <Head />
-    <Body style={{ fontFamily: 'Arial, sans-serif', padding: '20px' }}>
-      <Container>
-        <Img
-          src="https://yourdomain.com/logo.png"
-          alt="Company Logo"
-          width="200"
-        />
-        <Heading>Checkout Confirmation</Heading>
-        <Text>Hi {personName},</Text>
-        <Text>You've successfully checked out <strong>{assetName}</strong>.</Text>
-        <Text><strong>Checkout Date:</strong> {checkoutDate}</Text>
-        <Hr />
-        <Text style={{ fontSize: '12px', color: '#666' }}>
-          This is an automated message from Asset Management System.
-        </Text>
-      </Container>
-    </Body>
-  </Html>
-);
-```
-
-### Example: Adding Action Buttons
-
-```tsx
-<Button
-  href="https://yourdomain.com/assets/view"
-  style={{
-    background: '#007bff',
-    color: 'white',
-    padding: '12px 24px',
-    borderRadius: '4px',
-    textDecoration: 'none',
-  }}
->
-  View Asset Details
-</Button>
-```
-
-### Example: Styled Table
-
-```tsx
-<Section>
-  <Row>
-    <Column style={{ padding: '8px', borderBottom: '1px solid #e0e0e0' }}>
-      <Text style={{ margin: 0, fontWeight: 'bold' }}>Asset:</Text>
-    </Column>
-    <Column style={{ padding: '8px', borderBottom: '1px solid #e0e0e0' }}>
-      <Text style={{ margin: 0 }}>{assetName}</Text>
-    </Column>
-  </Row>
-  <Row>
-    <Column style={{ padding: '8px', borderBottom: '1px solid #e0e0e0' }}>
-      <Text style={{ margin: 0, fontWeight: 'bold' }}>Checked Out To:</Text>
-    </Column>
-    <Column style={{ padding: '8px', borderBottom: '1px solid #e0e0e0' }}>
-      <Text style={{ margin: 0 }}>{personName}</Text>
-    </Column>
-  </Row>
-</Section>
-```
-
-## Testing Templates
-
-To preview your templates:
-
-1. Install React Email CLI:
-   ```bash
-   bun add -d @react-email/cli
-   ```
-
-2. Add a script to package.json:
-   ```json
-   "scripts": {
-     "email:dev": "email dev"
-   }
-   ```
-
-3. Run the preview server:
-   ```bash
-   bun run email:dev
-   ```
-
-4. Visit `http://localhost:3000` to preview your templates
-
-## Best Practices
-
-1. **Keep it simple**: Email clients have limited CSS support
-2. **Use inline styles**: React Email handles this automatically
-3. **Test across clients**: Gmail, Outlook, Apple Mail all render differently
-4. **Mobile responsive**: Use tables and max-width for mobile support
-5. **Plain text alternative**: Consider adding a plain text version for accessibility
-
-## Resources
-
-- [React Email Documentation](https://react.email/docs)
-- [React Email Components](https://react.email/docs/components)
-- [Email Client CSS Support](https://www.caniemail.com/)
-
-## After Customization
-
-After editing templates, simply restart the application:
+To preview templates during development:
 
 ```bash
-bun start
+bun run email
 ```
 
-The new templates will be used immediately for all new emails.
+This starts the React Email preview server at `http://localhost:3000`.
+
+### Testing Templates
+
+When you make changes:
+1. Preview in the React Email dev server
+2. Send a test email via the admin UI
+3. Check rendering in multiple email clients (Gmail, Outlook, etc.)
+
+## Email Service
+
+Templates are rendered using `@react-email/render` in `src/services/email.ts`.
+
+The EmailService handles:
+- Gmail API authentication
+- Template rendering to HTML
+- Sending via Gmail API
+- Logging to database
+
+## Adding New Templates
+
+1. Create a new `.tsx` file in `src/emails/`
+2. Import and use BaseLayout for consistency
+3. Define TypeScript props interface
+4. Add a method to EmailService in `src/services/email.ts`
+5. Call the method from the appropriate place in `src/services/poller.ts`
+
+Example structure:
+
+```tsx
+import { BaseLayout } from "./BaseLayout"
+
+export type MyTemplateProps = {
+  prop1: string
+  prop2: string
+}
+
+export default function MyTemplate({ prop1, prop2 }: MyTemplateProps) {
+  return (
+    <BaseLayout previewText="Preview text here">
+      {/* Your email content */}
+    </BaseLayout>
+  )
+}
+```

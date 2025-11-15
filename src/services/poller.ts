@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm"
 import type { Asset, AssetBotsClient } from "../api/assetbots"
-import { getAssetName } from "../api/assetbots"
 import {
 	activeCheckouts,
 	db,
@@ -89,28 +88,43 @@ export class AssetPoller {
 	}
 
 	private async processCheckout(
-		asset: Asset,
-		autoSend: boolean
+		checkoutId: string,
+		autoSend: boolean,
+		assetIds: string[]
 	): Promise<void> {
-		if (!asset.checkout) return
-
-		const checkout = asset.checkout
-		const checkoutId = checkout.id
-		const checkoutValue = checkout.value
-
-		const assetName = getAssetName(asset)
-		const checkoutDate = new Date(checkoutValue.date)
-
-		// Always store active checkout for check-in tracking (before processing check)
-		await this.storeActiveCheckout({
-			assetId: asset.id,
-			checkoutId,
-			checkoutDate,
-			status: "active"
-		})
-
 		// Check if already processed for email purposes
 		if (await this.isProcessed("checkout", checkoutId)) {
+			return
+		}
+
+		// Fetch full checkout details from API
+		const checkoutDetails = await this.client.getCheckout(checkoutId)
+		if (!checkoutDetails) {
+			console.log(`Checkout ${checkoutId} not found in API`)
+			return
+		}
+
+		// Store active checkout for each asset
+		const checkoutDate = new Date(checkoutDetails.date)
+		for (const assetId of assetIds) {
+			await this.storeActiveCheckout({
+				assetId,
+				checkoutId,
+				checkoutDate,
+				status: "active"
+			})
+		}
+
+		// Extract assets from checkout details
+		const assets =
+			checkoutDetails.assets?.map((a) => ({
+				description: a.value.description || a.value.tag || a.id,
+				tag: a.value.tag,
+				category: undefined
+			})) || []
+
+		if (assets.length === 0) {
+			console.log(`Checkout ${checkoutId} has no assets`)
 			return
 		}
 
@@ -118,8 +132,8 @@ export class AssetPoller {
 		let isLate = false
 		let hoursLate = 0
 
-		if (checkoutValue.dueDate) {
-			const dueDate = new Date(checkoutValue.dueDate)
+		if (checkoutDetails.dueDate) {
+			const dueDate = new Date(checkoutDetails.dueDate)
 			const now = new Date()
 			if (now > dueDate) {
 				isLate = true
@@ -130,43 +144,46 @@ export class AssetPoller {
 		}
 
 		// Check if this is a location-only checkout (no person)
-		const hasPerson = !!checkoutValue.person
-		const personName = checkoutValue.person?.value.name || "Unknown"
-
-		// Extract category from asset
-		const category = asset.category?.value
+		const hasPerson = !!checkoutDetails.person
+		const personName = checkoutDetails.person?.value.name || "Unknown"
 
 		// TODO: Extract returnTo from custom fields when structure is known
 		const returnTo = undefined
 
+		const assetsList =
+			assets.length === 1
+				? assets[0]!.description
+				: assets.length === 2
+					? `${assets[0]!.description} and ${assets[1]!.description}`
+					: `${assets
+							.slice(0, -1)
+							.map((a) => a.description)
+							.join(", ")}, and ${assets[assets.length - 1]!.description}`
+
 		if (isLate) {
 			if (autoSend) {
-				console.log(`✉️  Late notification: ${assetName}`)
-				// Send late notification to admins only (always admin-only for late notifications)
+				console.log(`✉️  Late notification: ${assetsList}`)
 				await this.emailService.sendLateNotification({
 					itemType: "checkout",
-					assetName,
+					assets,
 					personName,
-					personEmail: undefined, // API doesn't provide email on person
-					date: checkoutValue.date,
+					personEmail: undefined,
+					date: checkoutDetails.date,
 					hoursLate,
-					category,
 					returnTo,
 					itemId: checkoutId,
 					itemData: {
-						assetName,
+						assets,
 						personName,
 						personEmail: undefined,
-						checkoutDate: checkoutValue.date,
-						dueDate: checkoutValue.dueDate,
-						category,
+						checkoutDate: checkoutDetails.date,
+						dueDate: checkoutDetails.dueDate,
 						returnTo
 					}
 				})
 			} else {
-				console.log(`⊘ Skipped late notification: ${assetName} (>1hr old)`)
-				// Log skipped email
-				const subject = `[LATE] Checkout: ${assetName}`
+				console.log(`⊘ Skipped late notification: ${assetsList} (>1hr old)`)
+				const subject = `[LATE] Checkout: ${assetsList}`
 				for (const adminEmail of [
 					...new Set(
 						[
@@ -185,12 +202,11 @@ export class AssetPoller {
 							isLate: true,
 							needsManualSend: true,
 							data: {
-								assetName,
+								assets,
 								personName,
 								personEmail: undefined,
-								checkoutDate: checkoutValue.date,
-								dueDate: checkoutValue.dueDate,
-								category,
+								checkoutDate: checkoutDetails.date,
+								dueDate: checkoutDetails.dueDate,
 								returnTo
 							}
 						},
@@ -199,38 +215,32 @@ export class AssetPoller {
 				}
 			}
 		} else {
-			// Only send checkout confirmation if there's a person
-			// Location-only checkouts don't need confirmation emails
 			if (hasPerson) {
 				if (autoSend) {
-					console.log(`✉️  Checkout confirmation: ${assetName}`)
-					// Send normal confirmation
+					console.log(`✉️  Checkout confirmation: ${assetsList}`)
 					await this.emailService.sendCheckoutConfirmation({
-						assetName,
+						assets,
 						personName,
-						personEmail: undefined, // API doesn't provide email on person
-						checkoutDate: checkoutValue.date,
-						dueDate: checkoutValue.dueDate,
-						category,
+						personEmail: undefined,
+						checkoutDate: checkoutDetails.date,
+						dueDate: checkoutDetails.dueDate,
 						returnTo,
 						itemId: checkoutId,
 						checkoutData: {
-							assetName,
+							assets,
 							personName,
 							personEmail: undefined,
-							checkoutDate: checkoutValue.date,
-							dueDate: checkoutValue.dueDate,
-							category,
+							checkoutDate: checkoutDetails.date,
+							dueDate: checkoutDetails.dueDate,
 							returnTo
 						}
 					})
 				} else {
 					console.log(
-						`⊘ Skipped checkout confirmation: ${assetName} (>1hr old)`
+						`⊘ Skipped checkout confirmation: ${assetsList} (>1hr old)`
 					)
-					// Log skipped email
-					const subject = `Checkout Confirmation: ${assetName}`
-					const recipient = undefined // API doesn't provide email
+					const subject = `Checkout Confirmation: ${assetsList}`
+					const recipient = undefined
 					const adminRecipient =
 						process.env.ADMIN_EMAILS?.split(",")[0] ||
 						process.env.FROM_EMAIL ||
@@ -246,12 +256,11 @@ export class AssetPoller {
 							isLate: false,
 							needsManualSend: true,
 							data: {
-								assetName,
+								assets,
 								personName,
 								personEmail: undefined,
-								checkoutDate: checkoutValue.date,
-								dueDate: checkoutValue.dueDate,
-								category,
+								checkoutDate: checkoutDetails.date,
+								dueDate: checkoutDetails.dueDate,
 								returnTo
 							}
 						},
@@ -259,18 +268,20 @@ export class AssetPoller {
 					)
 				}
 			} else {
-				console.log(`✓ Checkout stored: ${assetName}`)
+				console.log(`✓ Checkout stored: ${assetsList}`)
 			}
 		}
 
-		// Mark as processed
-		await this.markProcessed({
-			itemType: "checkout",
-			itemId: checkoutId,
-			assetId: asset.id,
-			createdAt: checkoutDate,
-			processedAt: new Date()
-		})
+		// Mark as processed for each asset
+		for (const assetId of assetIds) {
+			await this.markProcessed({
+				itemType: "checkout",
+				itemId: checkoutId,
+				assetId,
+				createdAt: checkoutDate,
+				processedAt: new Date()
+			})
+		}
 	}
 
 	private async processRepair(asset: Asset): Promise<void> {
@@ -285,23 +296,28 @@ export class AssetPoller {
 			return
 		}
 
-		const assetName = getAssetName(asset)
+		const assets = [
+			{
+				description: asset.description || asset.tag || asset.id,
+				tag: asset.tag,
+				category: asset.category?.value
+			}
+		]
 
 		const createdDate = asset.updateDate
 			? new Date(asset.updateDate)
 			: new Date()
 
-		console.log(`✉️  Repair notification: ${assetName}`)
-		// Repairs always go to admins only, no late logic
+		console.log(`✉️  Repair notification: ${assets[0]!.description}`)
 		await this.emailService.sendRepairNotification({
-			assetName,
+			assets,
 			status: repairValue.status,
 			description: repairValue.description,
 			dueDate: repairValue.dueDate,
 			repairDate: repairValue.repairDate,
 			itemId: repairId,
 			repairData: {
-				assetName,
+				assets,
 				status: repairValue.status,
 				description: repairValue.description,
 				dueDate: repairValue.dueDate,
@@ -320,13 +336,10 @@ export class AssetPoller {
 	}
 
 	private async processCheckIn(asset: Asset): Promise<void> {
-		const assetName = getAssetName(asset)
-
-		// Get active checkout for this asset
 		const activeCheckout = await this.getActiveCheckout(asset.id)
 
 		if (!activeCheckout) {
-			return // No active checkout to check in
+			return
 		}
 
 		// Check if already processed as a check-in
@@ -336,18 +349,12 @@ export class AssetPoller {
 		}
 
 		console.log(
-			`Detected check-in for ${assetName}, fetching checkout details...`
+			`Detected check-in for asset ${asset.id}, fetching checkout details...`
 		)
 
 		try {
-			// Fetch the checkout details from API
 			const checkoutDetails = await this.client.getCheckout(
 				activeCheckout.checkoutId
-			)
-
-			console.log(
-				`Checkout details for ${assetName}:`,
-				JSON.stringify(checkoutDetails, null, 2)
 			)
 
 			if (!checkoutDetails) {
@@ -357,7 +364,29 @@ export class AssetPoller {
 
 			// If status is not "CheckedOut", it means it's been checked in
 			if (checkoutDetails.status !== "CheckedOut") {
-				console.log(`Processing check-in for ${assetName}`)
+				const assets =
+					checkoutDetails.assets?.map((a) => ({
+						description: a.value.description || a.value.tag || a.id,
+						tag: a.value.tag,
+						category: undefined
+					})) || []
+
+				if (assets.length === 0) {
+					console.log(`Checkout ${activeCheckout.checkoutId} has no assets`)
+					return
+				}
+
+				const assetsList =
+					assets.length === 1
+						? assets[0]!.description
+						: assets.length === 2
+							? `${assets[0]!.description} and ${assets[1]!.description}`
+							: `${assets
+									.slice(0, -1)
+									.map((a) => a.description)
+									.join(", ")}, and ${assets[assets.length - 1]!.description}`
+
+				console.log(`Processing check-in for ${assetsList}`)
 
 				const checkoutDate = new Date(activeCheckout.checkoutDate)
 				const checkInDate = new Date()
@@ -367,24 +396,20 @@ export class AssetPoller {
 				)
 
 				const personName = checkoutDetails.person?.value.name || "Unknown"
-				const category = asset.category?.value
 
-				console.log(`✉️  Check-in notification: ${assetName}`)
-				// Send check-in notification to admins
+				console.log(`✉️  Check-in notification: ${assetsList}`)
 				await this.emailService.sendCheckInNotification({
-					assetName,
+					assets,
 					personName,
 					checkoutDate: activeCheckout.checkoutDate.toISOString(),
 					checkInDate: checkInDate.toISOString(),
-					category,
 					daysOut,
 					itemId: checkinId,
 					checkInData: {
-						assetName,
+						assets,
 						personName,
 						checkoutDate: activeCheckout.checkoutDate.toISOString(),
 						checkInDate: checkInDate.toISOString(),
-						category,
 						daysOut
 					}
 				})
@@ -402,7 +427,10 @@ export class AssetPoller {
 				})
 			}
 		} catch (error) {
-			console.error(`Error fetching checkout details for ${assetName}:`, error)
+			console.error(
+				`Error fetching checkout details for asset ${asset.id}:`,
+				error
+			)
 		}
 	}
 
@@ -422,28 +450,52 @@ export class AssetPoller {
 			const now = new Date()
 			const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
 
-			for (const asset of assets) {
-				const assetName = getAssetName(asset)
+			// Group assets by checkout ID to process each checkout once
+			const checkoutGroups = new Map<
+				string,
+				{ assetIds: string[]; date: Date; autoSend: boolean }
+			>()
 
+			for (const asset of assets) {
+				if (asset.checkout) {
+					const checkoutId = asset.checkout.id
+					const checkoutDate = new Date(asset.checkout.value.date)
+					const autoSend = checkoutDate >= oneHourAgo
+
+					if (!checkoutGroups.has(checkoutId)) {
+						checkoutGroups.set(checkoutId, {
+							assetIds: [],
+							date: checkoutDate,
+							autoSend
+						})
+					}
+					checkoutGroups.get(checkoutId)!.assetIds.push(asset.id)
+				}
+			}
+
+			// Process each checkout once with all its assets
+			for (const [checkoutId, { assetIds, autoSend }] of checkoutGroups) {
 				try {
-					// Process checkout if exists
-					if (asset.checkout) {
-						const checkoutDate = new Date(asset.checkout.value.date)
-						// Auto-send only if checkout is within the past hour
-						const autoSend = checkoutDate >= oneHourAgo
-						await this.processCheckout(asset, autoSend)
-					} else {
-						// Check if this is a check-in (no checkout but we have an active record)
+					await this.processCheckout(checkoutId, autoSend, assetIds)
+				} catch (error) {
+					console.error(`Error processing checkout ${checkoutId}:`, error)
+				}
+			}
+
+			// Process check-ins and repairs per asset
+			for (const asset of assets) {
+				try {
+					// Check for check-ins (no checkout but have active record)
+					if (!asset.checkout) {
 						await this.processCheckIn(asset)
 					}
 
-					// Process repair if exists
+					// Process repairs
 					if (asset.repair) {
 						await this.processRepair(asset)
 					}
 				} catch (error) {
-					console.error(`Error processing asset ${assetName}:`, error)
-					// Continue processing other assets
+					console.error(`Error processing asset ${asset.id}:`, error)
 				}
 			}
 

@@ -1,12 +1,14 @@
 {
 	"name": "assettools",
-	"module": "src/index.ts",
 	"type": "module",
 	"private": true,
 	"scripts": {
-		"start": "bun run src/index.ts",
-		"dev": "bun run --watch src/index.ts",
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"cron": "bun src/cron.ts",
 		"db:generate": "drizzle-kit generate",
+		"db:migrate": "drizzle-kit migrate",
 		"email": "email dev --dir src/emails",
 		"setup:gmail": "bun scripts/setup-gmail.ts",
 		"lint": "biome check . --write",
@@ -15,7 +17,9 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.2.6",
 		"@react-email/preview-server": "4.3.0",
+		"@types/better-sqlite3": "7.6.12",
 		"@types/bun": "1.3.0",
+		"@types/node-cron": "3.0.11",
 		"@types/react": "19.2.2",
 		"@types/react-dom": "19.2.2",
 		"drizzle-kit": "0.31.5",
@@ -26,9 +30,15 @@
 		"@react-email/components": "0.5.6",
 		"@react-email/render": "1.3.2",
 		"@react-email/tailwind": "^1.2.2",
+		"@tailwindcss/postcss": "4.1.17",
+		"better-auth": "1.3.34",
+		"better-sqlite3": "11.8.1",
 		"drizzle-orm": "0.44.6",
 		"googleapis": "162.0.0",
+		"next": "16.0.1",
+		"node-cron": "4.2.1",
 		"react": "19.2.0",
-		"react-dom": "19.2.0"
+		"react-dom": "19.2.0",
+		"tailwindcss": "4.1.17"
 	}
 }
