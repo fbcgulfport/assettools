@@ -397,6 +397,18 @@ export class AssetPoller {
 
 				const personName = checkoutDetails.person?.value.name || "Unknown"
 
+				// Mark check-in as processed BEFORE sending email
+				await this.markProcessed({
+					itemType: "checkin",
+					itemId: checkinId,
+					assetId: asset.id,
+					createdAt: checkInDate,
+					processedAt: new Date()
+				})
+
+				// Mark checkout as completed
+				await this.markCheckoutCompleted(activeCheckout.checkoutId)
+
 				console.log(`✉️  Check-in notification: ${assetsList}`)
 				await this.emailService.sendCheckInNotification({
 					assets,
@@ -412,18 +424,6 @@ export class AssetPoller {
 						checkInDate: checkInDate.toISOString(),
 						daysOut
 					}
-				})
-
-				// Mark checkout as completed
-				await this.markCheckoutCompleted(activeCheckout.checkoutId)
-
-				// Mark check-in as processed
-				await this.markProcessed({
-					itemType: "checkin",
-					itemId: checkinId,
-					assetId: asset.id,
-					createdAt: checkInDate,
-					processedAt: new Date()
 				})
 			}
 		} catch (error) {
